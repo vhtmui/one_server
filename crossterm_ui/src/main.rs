@@ -8,23 +8,35 @@ use crossterm::{
     style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{self, Clear, ClearType, EnterAlternateScreen, ScrollUp, SetSize, size},
 };
-use smol::{self, fs::read};
-use std::io::{self, stdout};
 use crossterm_ui;
+use smol::{self, fs::read};
+use std::io::{self, Write, stdout};
 
 #[apply(main)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdout = stdout();
 
-    Screan::run("Alter");
+    execute!(stdout, EnterAlternateScreen, Print("asdfasdfasf\nsdfasdfasfsd\nasfasfdsfas"))?;
+    terminal::enable_raw_mode()?;
 
-    let page1 = Page::new();
-
-    page1.add_element(Element::new());
-
-    page1.draw();
-
-
+    loop {
+        if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Press,
+            ..
+        }) = event::read().unwrap()
+        {
+            match code {
+                KeyCode::Esc => {
+                    // terminal::disable_raw_mode()?;
+                }
+                KeyCode::Enter => {
+                    stdout.flush()?;
+                }
+                _ => {}
+            }
+        }
+    }
 
     Ok(())
 }
