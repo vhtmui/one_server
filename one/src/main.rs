@@ -1,4 +1,4 @@
-use crossterm_ui::menu_lib;
+use crossterm_ui::MultiSelectMenu;
 use futures;
 use smol;
 use smol_macros::main;
@@ -13,21 +13,13 @@ main!(
 
         let default_selected = vec![2]; // 默认选中第1和第3个选项
 
-        let mut menu = menu_lib::MultiSelectMenu::new(options, default_selected);
-
-        let timer = vec![1, 2, 3, 4, 5];
-
-        let timer_future = async {
-            for i in 0..timer.len() {
-                println!("Timer: {}", timer[i]);
-                smol::Timer::after(std::time::Duration::from_secs(1)).await;
-            }
-        };
+        let mut menu = MultiSelectMenu::new(options, default_selected);
 
         let menu_future = async {
             let result = menu.run().await;
             println!("{result:?}");
         };
-        futures::join!(timer_future, menu_future);
+
+
     }
 );
