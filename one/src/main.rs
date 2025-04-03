@@ -1,4 +1,4 @@
-use crossterm_ui::MultiSelectMenu;
+use crossterm_ui::component::Selection;
 use futures;
 use smol;
 use smol_macros::main;
@@ -13,7 +13,7 @@ main!(
 
         let default_selected = vec![2]; // 默认选中第1和第3个选项
 
-        let mut menu = MultiSelectMenu::new(options, default_selected);
+        let mut menu = Selection::new_with_default(options);
 
         let menu_future = async {
             let result = menu.run().await;
