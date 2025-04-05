@@ -1,3 +1,3 @@
-use crate::component::Dimension;
+use crate::component::XY;
 
-pub fn clear_area(start: Dimension, size: Dimension) {}
+pub fn clear_area(start: &XY, size: &XY) {} 

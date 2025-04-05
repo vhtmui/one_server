@@ -11,15 +11,9 @@ main!(
             "Option 3".to_string(),
         ];
 
-        let default_selected = vec![2]; // 默认选中第1和第3个选项
-
         let mut menu = Selection::new_with_default(options);
 
-        let menu_future = async {
-            let result = menu.run().await;
-            println!("{result:?}");
-        };
-
-
+        let result = menu.run().await;
+        println!("{result:?}");
     }
 );
