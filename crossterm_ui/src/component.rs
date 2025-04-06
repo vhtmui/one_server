@@ -51,20 +51,6 @@ impl Selection {
         clear_area(start, size);
     }
 
-    // fn format_item(&mut self) -> Vec<String> {
-    //     let mut result = Vec::new();
-
-    //     for (index, item) in self.items.iter().enumerate() {
-    //         result.push(if index + 1 == self.default_selected {
-    //             format!("> {}", item)
-    //         } else {
-    //             format!("  {}", item)
-    //         });
-    //     }
-
-    //     result
-    // }
-
     fn print_item(&self, index: usize, selected: bool) {
         let mut stdout = stdout();
         let color;
@@ -91,7 +77,7 @@ impl Selection {
     }
 
     pub async fn run(&mut self) {
-        self.clear_self(); // 调用 clear_self
+        self.clear_self(); 
 
         for index in 0..=self.items.len() - 1 {
             if index == self.default_selected {
@@ -128,7 +114,7 @@ impl Selection {
                         _ => {}
                     }
 
-                    self.clear_self(); // 再次调用 clear_self
+                    self.clear_self(); 
 
                     for index in 0..=self.items.len() - 1 {
                         if index == self.default_selected {
