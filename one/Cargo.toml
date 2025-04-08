@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-crossterm_ui = { path = "../crossterm_ui" }
+tui_components = { path = "../tui_components" }
 smol = "2.0.2"
 smol-macros = "0.1.1"
 futures = "0.3.31"

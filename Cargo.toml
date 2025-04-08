@@ -1,2 +1,2 @@
 [workspace]
-members = ["one", "crossterm_ui"]
+members = ["one", "tui_components"]

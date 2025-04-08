@@ -1,4 +1,4 @@
-use crossterm_ui::component::Selection;
+use tui_components;
 use futures;
 use smol;
 use smol_macros::main;
@@ -10,10 +10,5 @@ main!(
             "Option 2".to_string(),
             "Option 3".to_string(),
         ];
-
-        let mut menu = Selection::new_with_default(options);
-
-        let result = menu.run().await;
-        println!("{result:?}");
     }
 );
