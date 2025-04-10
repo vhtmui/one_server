@@ -5,5 +5,7 @@ edition = "2024"
 
 [dependencies]
 smol = "2.0.2"
+smol-macros = "0.1.1"
+macro_rules_attribute = "0.2.0"
 crossterm = "0.29.0"
 ratatui = "0.29.0"
