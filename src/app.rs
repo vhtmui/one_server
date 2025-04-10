@@ -1,24 +1,29 @@
-use std::time::Duration;
+use std::collections::HashMap;
+use std::{ops::Deref, time::Duration};
 
 use ratatui::{
     Frame,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
-    widgets::{Block, Borders, Widget},
+    widgets::{Block, Borders, WidgetRef Widget},
 };
 
-enum Pages {
-    Server,
-}
-
-pub struct App {
-    current_page: Pages,
+pub struct Table<T>
+where
+    T: WidgetRef,
+{
+    apps: HashMap<String, T>,
+    current_app: String,
     menu_show: bool,
 }
 
-impl App {
+impl<T> Table<T>
+where
+    T: Widget,
+{
     pub fn new() -> Self {
-        App {
-            current_page: Pages::Server,
+        Table {
+            apps: HashMap::new(),
+            current_app: String::new(),
             menu_show: false,
         }
     }
@@ -27,19 +32,17 @@ impl App {
         self.menu_show = !self.menu_show;
     }
 
-    pub fn current_page(&self) -> &Pages {
-        &self.current_page
+    pub fn current_app(&self) -> &String {
+        &self.current_app
     }
 
-    pub fn set_current_page(&mut self, page: Pages) {
-        self.current_page = page;
+    pub fn set_current_page(&mut self, app: String) {
+        self.current_app = app;
     }
 
     pub fn draw(&self, f: &mut Frame) {
-        match self.current_page {
-            Pages::Server => {
-                f.render_widget(server_page(), f.area());
-            }
+        if let Some(&widget) = self.apps.get(&self.current_app) {
+            f.render_widget(widget, f.area());
         }
     }
 }

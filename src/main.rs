@@ -1,3 +1,6 @@
+mod my_widgets;
+mod app;
+
 use macro_rules_attribute::apply;
 use std::{
     io::{Stdout, stdout},
@@ -5,7 +8,7 @@ use std::{
 };
 
 use ::crossterm::terminal::{self, enable_raw_mode};
-use app::App;
+use app::Table;
 use ratatui::{
     Terminal,
     crossterm::{
@@ -19,13 +22,11 @@ use ratatui::{
 use smol::{self, lock::futures::BarrierWait};
 use smol_macros::main;
 
-mod app;
-
 #[apply(main!)]
 async fn main() {
     let mut terminal = ratatui::init();
 
-    let app = App::new();
+    let app = Table::new();
 
     run_app(&mut terminal, &app).await.unwrap();
 
@@ -34,7 +35,7 @@ async fn main() {
 
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    app: &App,
+    app: &Table,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     loop {
         terminal.draw(|f| app.draw(f)).unwrap();
