@@ -1,7 +1,8 @@
-mod my_widgets;
 mod app;
+mod my_widgets;
 
 use macro_rules_attribute::apply;
+use my_widgets::FileMonitor;
 use std::{
     io::{Stdout, stdout},
     time::Duration,
@@ -18,6 +19,7 @@ use ratatui::{
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode},
     },
     prelude::CrosstermBackend,
+    widgets::{Widget, WidgetRef},
 };
 use smol::{self, lock::futures::BarrierWait};
 use smol_macros::main;
@@ -26,28 +28,13 @@ use smol_macros::main;
 async fn main() {
     let mut terminal = ratatui::init();
 
-    let app = Table::new();
+    let mut app = Table::new();
+    let file_monitor = Box::new(FileMonitor::new());
 
-    run_app(&mut terminal, &app).await.unwrap();
+    app.add_widgets(String::from("file_monitor"), file_monitor);
+    app.set_current_page(String::from("file_monitor"));
+
+    app.run(&mut terminal).await.unwrap();
 
     ratatui::restore();
-}
-
-async fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    app: &Table,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    loop {
-        terminal.draw(|f| app.draw(f)).unwrap();
-
-        if poll(Duration::from_millis(0))? {
-            if !app::handle_event().unwrap() {
-                break;
-            };
-        } else {
-            smol::future::yield_now().await;
-        }
-    }
-
-    Ok(false)
 }
