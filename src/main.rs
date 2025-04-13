@@ -28,13 +28,14 @@ use smol_macros::main;
 async fn main() {
     let mut terminal = ratatui::init();
 
-    let mut app = Table::new();
+    let app = Table::new();
     let file_monitor = Box::new(FileMonitor::new());
 
-    app.add_widgets(String::from("file_monitor"), file_monitor);
-    app.set_current_page(String::from("file_monitor"));
-
-    app.run(&mut terminal).await.unwrap();
+    app.add_widgets(String::from("file_monitor"), file_monitor)
+        .set_current_page(String::from("file_monitor"))
+        .run(&mut terminal)
+        .await
+        .unwrap();
 
     ratatui::restore();
 }

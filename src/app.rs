@@ -4,18 +4,26 @@ use std::{ops::Deref, time::Duration};
 
 use crate::my_widgets::FileMonitor;
 use chrono::Local;
-use ratatui::widgets;
+use ratatui::layout::Rect;
+use ratatui::prelude::CrosstermBackend;
+use ratatui::widgets::{self, HighlightSpacing, List, ListState, StatefulWidget};
 use ratatui::{
-    Frame,
+    Frame, Terminal,
+    buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
-    prelude::*,
+    style::{Modifier, Style, palette::tailwind::SLATE},
     widgets::{Block, Borders, Widget, WidgetRef},
 };
+const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+pub struct Menu {
+    show: bool,
+    state: ListState,
+}
 
 pub struct Table {
     apps: HashMap<String, Box<dyn WidgetRef>>,
     current_app: String,
-    menu_show: bool,
+    menu: Menu,
 }
 
 impl Table {
@@ -23,24 +31,30 @@ impl Table {
         Table {
             apps: HashMap::new(),
             current_app: String::new(),
-            menu_show: false,
+            menu: Menu {
+                show: false,
+                state: ListState::default(),
+            },
         }
     }
 
-    pub fn add_widgets(&mut self, name: String, widgets: Box<dyn WidgetRef>) {
+    pub fn add_widgets(mut self, name: String, widgets: Box<dyn WidgetRef>) -> Self {
         self.apps.insert(name, widgets);
+
+        self
+    }
+
+    pub fn set_current_page(mut self, app: String) -> Self {
+        self.current_app = app;
+        self
     }
 
     pub fn toggle_menu(&mut self) {
-        self.menu_show = !self.menu_show;
+        self.menu.show = !self.menu.show;
     }
 
-    pub fn current_app(&self) -> &String {
+    pub fn get_current_app(&self) -> &String {
         &self.current_app
-    }
-
-    pub fn set_current_page(&mut self, app: String) {
-        self.current_app = app;
     }
 
     pub async fn run(
@@ -63,8 +77,20 @@ impl Table {
 
         Ok(false)
     }
-    pub fn draw(&self, frame: &mut Frame) {
+    pub fn draw(&mut self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
+    }
+
+    pub fn render_menu(&mut self, area: Rect, buf: &mut Buffer) {
+        let block = Block::new().borders(Borders::ALL).title("Menu");
+
+        let menu_list = List::new(self.apps.keys().map(AsRef::as_ref).collect::<Vec<&str>>())
+            .block(block)
+            .highlight_spacing(HighlightSpacing::WhenSelected)
+            .highlight_style(SELECTED_STYLE)
+            .highlight_symbol(">");
+
+        StatefulWidget::render(menu_list, area, buf, &mut self.menu.state);
     }
 
     pub fn handle_event(&mut self, event: Event) -> Result<bool, Box<dyn std::error::Error>> {
@@ -76,11 +102,11 @@ impl Table {
         {
             match code {
                 KeyCode::Esc => {
-                    self.menu_show = !self.menu_show;
+                    self.menu.show = !self.menu.show;
                 }
                 KeyCode::Enter => {}
                 KeyCode::Char('q') => {
-                    if self.menu_show {
+                    if self.menu.show {
                         return Ok(false);
                     }
                 }
@@ -91,7 +117,7 @@ impl Table {
     }
 }
 
-impl Widget for &Table {
+impl Widget for &mut Table {
     fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -99,10 +125,8 @@ impl Widget for &Table {
         if let Some(widgets) = self.apps.get(&self.current_app) {
             widgets.render_ref(area, buf);
         }
-        if self.menu_show {
-            Block::default()
-                .borders(Borders::ALL)
-                .render(get_center_rect(area, 0.5, 0.5), buf);
+        if self.menu.show {
+            self.render_menu(get_center_rect(area, 0.5, 0.5), buf);
         }
     }
 }

@@ -1,13 +1,15 @@
 use chrono::{DateTime, Local, TimeZone};
+use crossterm::event;
 use ratatui::{
     Frame,
+    buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
-    prelude::*,
-    widgets::{Block, Borders, Widget, WidgetRef},
+    layout::Rect,
+    widgets::{Block, Borders, List, Widget, WidgetRef},
 };
 
 pub struct FileMonitor {
-    lunch_data: DateTime<Local>,
+    lunch_datatime: DateTime<Local>,
     files_got: usize,
     files_recorded: usize,
 }
@@ -15,7 +17,7 @@ pub struct FileMonitor {
 impl FileMonitor {
     pub fn new() -> Self {
         FileMonitor {
-            lunch_data: Local::now(),
+            lunch_datatime: Local::now(),
             files_got: 0,
             files_recorded: 0,
         }
@@ -29,6 +31,3 @@ impl WidgetRef for FileMonitor {
     }
 }
 
-pub struct Menu {
-    
-}
