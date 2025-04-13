@@ -1,22 +1,22 @@
+use std::thread::sleep;
+
 use chrono::{DateTime, Local, TimeZone};
 use crossterm::event;
 use ratatui::{
-    Frame,
-    buffer::Buffer,
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
-    layout::Rect,
-    widgets::{Block, Borders, List, Widget, WidgetRef},
+    buffer::Buffer, crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyEventKind}, layout::Rect, widgets::{block::title, Block, Borders, List, Widget, WidgetRef}, Frame
 };
 
 pub struct FileMonitor {
+    title: String,
     lunch_datatime: DateTime<Local>,
     files_got: usize,
     files_recorded: usize,
 }
 
 impl FileMonitor {
-    pub fn new() -> Self {
+    pub fn new(title: String) -> Self {
         FileMonitor {
+            title: title,
             lunch_datatime: Local::now(),
             files_got: 0,
             files_recorded: 0,
@@ -26,7 +26,7 @@ impl FileMonitor {
 
 impl WidgetRef for FileMonitor {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title("FileMonitor");
+        let block = Block::new().borders(Borders::ALL).title(&*self.title);
         block.render(area, buf);
     }
 }

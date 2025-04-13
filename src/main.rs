@@ -29,12 +29,21 @@ async fn main() {
     let mut terminal = ratatui::init();
 
     let app = Table::new();
-    let file_monitor = (String::from("file_monitor"), Box::new(FileMonitor::new()));
-    let file_monitor2 = (String::from("file_monitor2"), Box::new(FileMonitor::new()));
-    let file_monitor3 = (String::from("file_monitor3"), Box::new(FileMonitor::new()));
+    let file_monitor = (
+        String::from("file_monitor"),
+        Box::new(FileMonitor::new("file_monitor".to_string())),
+    );
+    let file_monitor2 = (
+        String::from("file_monitor2"),
+        Box::new(FileMonitor::new("file_monitor2".to_string())),
+    );
+    let file_monitor3 = (
+        String::from("file_monitor3"),
+        Box::new(FileMonitor::new("file_monitor3".to_string())),
+    );
 
     add_widgets!(app, file_monitor, file_monitor2, file_monitor3)
-        .set_current_page(String::from("file_monitor"))
+        .set_current_app(0)
         .run(&mut terminal)
         .await
         .unwrap();
