@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::io::Stdout;
 use std::{ops::Deref, time::Duration};
 
-use crate::my_widgets::FileMonitor;
 use chrono::Local;
 use ratatui::layout::Rect;
 use ratatui::prelude::CrosstermBackend;
@@ -14,7 +13,11 @@ use ratatui::{
     style::{Modifier, Style, palette::tailwind::SLATE},
     widgets::{Block, Borders, Widget, WidgetRef},
 };
+
+use crate::my_widgets::get_center_rect;
+
 const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+
 pub struct Menu {
     show: bool,
     state: ListState,
@@ -63,7 +66,9 @@ impl Table {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let data_time_now = Local::now();
         loop {
-            terminal.draw(|frame| self.draw(frame)).unwrap();
+            terminal
+                .draw(|frame| frame.render_widget(&mut *self, frame.area()))
+                .unwrap();
 
             if poll(Duration::from_millis(0))? {
                 let event = read()?;
@@ -76,9 +81,6 @@ impl Table {
         }
 
         Ok(false)
-    }
-    pub fn draw(&mut self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
     }
 
     pub fn render_menu(&mut self, area: Rect, buf: &mut Buffer) {
@@ -110,6 +112,16 @@ impl Table {
                         return Ok(false);
                     }
                 }
+                KeyCode::Up => {
+                    if self.menu.show {
+                        self.menu.state.select_previous();
+                    }
+                }
+                KeyCode::Down => {
+                    if self.menu.show {
+                        self.menu.state.select_next();
+                    }
+                }
                 _ => {}
             }
         }
@@ -131,19 +143,37 @@ impl Widget for &mut Table {
     }
 }
 
-pub fn get_center_rect(area: Rect, width_percentage: f32, height_percentage: f32) -> Rect {
-    if width_percentage > 0.0
-        && width_percentage < 1.0
-        && height_percentage > 0.0
-        && height_percentage < 1.0
-    {
-        Rect {
-            x: (area.width as f32 * (1.0 - width_percentage) * 0.5) as u16,
-            y: (area.height as f32 * (1.0 - height_percentage) * 0.5) as u16,
-            width: (area.width as f32 * width_percentage) as u16,
-            height: (area.height as f32 * height_percentage) as u16,
-        }
-    } else {
-        area
+impl Menu {
+    fn select_none(&mut self) {
+        self.state.select(None);
     }
+
+    fn select(&mut self, index: Option<usize>) {
+        self.state.select(index);
+    }
+    fn select_next(&mut self) {
+        self.state.select_next();
+    }
+    fn select_previous(&mut self) {
+        self.state.select_previous();
+    }
+    fn select_first(&mut self) {
+        self.state.select_first();
+    }
+    fn select_last(&mut self) {
+        self.state.select_last();
+    }
+
+    fn handle_event(&mut self, event: Event) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(true)
+    }
+}
+
+#[macro_export]
+macro_rules!  add_widgets {
+    ($table:expr, $($widget:expr),*) => {
+        $table$(
+            .add_widgets($widget.0, $widget.1)
+        )*
+    };
 }
