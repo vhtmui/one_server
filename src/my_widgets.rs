@@ -13,12 +13,13 @@ use ratatui::{
 use crate::app::{DEFAULT, EXIT_PROGRESS, TOGGLE_MENU};
 
 pub trait MyWidgets: WidgetRef {
-    fn handle_event(&self, event: Event) -> Result<char, Box<dyn std::error::Error>>;
+    fn handle_event(&self, event: Event) -> Result<char, std::io::Error>;
 }
 
 pub struct FileMonitor {
     title: String,
     lunch_datatime: DateTime<Local>,
+    monitor_status: bool,
     files_got: usize,
     files_recorded: usize,
 }
@@ -28,9 +29,13 @@ impl FileMonitor {
         FileMonitor {
             title: title,
             lunch_datatime: Local::now(),
+            monitor_status: false,
             files_got: 0,
             files_recorded: 0,
         }
+    }
+    pub fn start_monitor(&mut self) {
+        
     }
 }
 
@@ -42,7 +47,7 @@ impl WidgetRef for FileMonitor {
 }
 
 impl MyWidgets for FileMonitor {
-    fn handle_event(&self, event: Event) -> Result<char, Box<dyn std::error::Error>> {
+    fn handle_event(&self, event: Event) -> Result<char, std::io::Error> {
         if let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Release,

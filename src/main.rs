@@ -1,5 +1,6 @@
 mod app;
 mod my_widgets;
+mod file_monitor;
 
 use macro_rules_attribute::apply;
 use my_widgets::FileMonitor;
@@ -29,6 +30,7 @@ async fn main() {
     let mut terminal = ratatui::init();
 
     let app = Table::new();
+
     let file_monitor = (
         String::from("file_monitor"),
         Box::new(FileMonitor::new("file_monitor".to_string())),

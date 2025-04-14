@@ -47,7 +47,7 @@ impl Table {
     pub async fn run(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    ) -> Result<bool, std::io::Error> {
         // let data_time_now = Local::now();
         loop {
             terminal
@@ -82,7 +82,7 @@ impl Table {
         StatefulWidget::render(menu_list, area, buf, &mut self.menu.state);
     }
 
-    pub fn handle_event(&mut self, event: Event) -> Result<char, Box<dyn std::error::Error>> {
+    pub fn handle_event(&mut self, event: Event) -> Result<char, std::io::Error> {
         let result = if self.menu.show {
             self.handle_menu_event(event)
         } else {
@@ -95,7 +95,7 @@ impl Table {
         }
     }
 
-    fn handle_menu_event(&mut self, event: Event) -> Result<char, Box<dyn std::error::Error>> {
+    fn handle_menu_event(&mut self, event: Event) -> Result<char, std::io::Error> {
         if let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Release,
