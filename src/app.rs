@@ -14,9 +14,13 @@ use ratatui::{
     widgets::{Block, Borders, Widget, WidgetRef},
 };
 
-use crate::my_widgets::{get_center_rect, HandleEvent}; // Ensure HandleEvent is imported
+use crate::my_widgets::{MyWidgets, get_center_rect}; // Ensure HandleEvent is imported
 
-const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+pub const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+
+pub const DEFAULT: char = 'D';
+pub const TOGGLE_MENU: char = 'M';
+pub const EXIT_PROGRESS: char = 'E';
 
 pub struct Menu {
     show: bool,
@@ -24,7 +28,7 @@ pub struct Menu {
 }
 
 pub struct Table {
-    apps: Vec<(String, Box<dyn WidgetRef>)>,
+    apps: Vec<(String, Box<dyn MyWidgets>)>,
     current_app: usize,
     menu: Menu,
 }
@@ -44,7 +48,7 @@ impl Table {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let data_time_now = Local::now();
+        // let data_time_now = Local::now();
         loop {
             terminal
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
@@ -52,7 +56,8 @@ impl Table {
 
             if poll(Duration::from_millis(0))? {
                 let event = read()?;
-                if !self.handle_event(event)? {
+
+                if let Ok(EXIT_PROGRESS) = self.handle_event(event) {
                     break;
                 }
             } else {
@@ -60,7 +65,7 @@ impl Table {
             }
         }
 
-        Ok(false)
+        Ok(true)
     }
 
     pub fn render_menu(&mut self, area: Rect, buf: &mut Buffer) {
@@ -77,31 +82,20 @@ impl Table {
         StatefulWidget::render(menu_list, area, buf, &mut self.menu.state);
     }
 
-    pub fn handle_event(&mut self, event: Event) -> Result<bool, Box<dyn std::error::Error>> {
-        if self.menu.show {
-            if let Ok(result) = self.handle_menu_event(event) {
-                return Ok(result);
-            }
+    pub fn handle_event(&mut self, event: Event) -> Result<char, Box<dyn std::error::Error>> {
+        let result = if self.menu.show {
+            self.handle_menu_event(event)
         } else {
-            if let Event::Key(KeyEvent {
-                code,
-                kind: KeyEventKind::Release,
-                ..
-            }) = event
-            {
-                match code {
-                    KeyCode::Esc => self.toggle_menu(),
-                    _ => {
-                        
-                        let current_app = self.get_current_app();
-                        current_app.handle_event(event)?;
-                    }
-                }
-            }
+            self.get_current_app().handle_event(event)
+        };
+        if result.is_ok() && result.unwrap() == EXIT_PROGRESS {
+            Ok(EXIT_PROGRESS)
+        } else {
+            Ok(DEFAULT)
         }
-        Ok(true)
     }
-    fn handle_menu_event(&mut self, event: Event) -> Result<bool, Box<dyn std::error::Error>> {
+
+    fn handle_menu_event(&mut self, event: Event) -> Result<char, Box<dyn std::error::Error>> {
         if let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Release,
@@ -110,15 +104,34 @@ impl Table {
         {
             match code {
                 KeyCode::Esc => self.toggle_menu(),
-                _ => {
-                    self.get_current_app();
+                KeyCode::Enter => {
+                    if let Some(index) = self.menu.state.selected() {
+                        self.current_app = index;
+                        self.toggle_menu();
+                    }
                 }
+                KeyCode::Char('q') => {
+                    if self.menu.show {
+                        return Ok(EXIT_PROGRESS);
+                    }
+                }
+                KeyCode::Up => {
+                    if self.menu.show {
+                        self.menu.state.select_previous();
+                    }
+                }
+                KeyCode::Down => {
+                    if self.menu.show {
+                        self.menu.state.select_next();
+                    }
+                }
+                _ => {}
             }
         }
-        Ok(true)
+        Ok(DEFAULT)
     }
 
-    pub fn add_widgets(mut self, name: String, widgets: Box<dyn WidgetRef>) -> Self {
+    pub fn add_widgets(mut self, name: String, widgets: Box<dyn MyWidgets>) -> Self {
         self.apps.push((name, widgets));
         self
     }
@@ -132,7 +145,7 @@ impl Table {
         self.menu.show = !self.menu.show;
     }
 
-    pub fn get_current_app(&self) -> &Box<dyn WidgetRef> {
+    pub fn get_current_app(&self) -> &Box<dyn MyWidgets> {
         &self.apps[self.current_app].1
     }
 
@@ -147,7 +160,8 @@ impl Widget for &mut Table {
         Self: Sized,
     {
         // Render the current app
-        let _ = &self.apps[self.current_app].1.render_ref(area, buf);
+        let current_app = &*self.apps[self.current_app].1;
+        current_app.render_ref(area, buf);
 
         // Render the menu if show
         if self.menu.show {

@@ -3,11 +3,17 @@ use std::thread::sleep;
 use chrono::{DateTime, Local, TimeZone};
 use crossterm::event;
 use ratatui::{
-    buffer::Buffer, crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyEventKind}, layout::Rect, widgets::{block::title, Block, Borders, List, Widget, WidgetRef}, Frame
+    Frame,
+    buffer::Buffer,
+    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
+    layout::Rect,
+    widgets::{Block, Borders, List, Widget, WidgetRef, block::title},
 };
 
-pub trait HandleEvent {
-    fn handle_event(&self, event: Event) -> Result<bool, Box<dyn std::error::Error>>;
+use crate::app::{DEFAULT, EXIT_PROGRESS, TOGGLE_MENU};
+
+pub trait MyWidgets: WidgetRef {
+    fn handle_event(&self, event: Event) -> Result<char, Box<dyn std::error::Error>>;
 }
 
 pub struct FileMonitor {
@@ -32,6 +38,26 @@ impl WidgetRef for FileMonitor {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let block = Block::new().borders(Borders::ALL).title(&*self.title);
         block.render(area, buf);
+    }
+}
+
+impl MyWidgets for FileMonitor {
+    fn handle_event(&self, event: Event) -> Result<char, Box<dyn std::error::Error>> {
+        if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Release,
+            ..
+        }) = event
+        {
+            match code {
+                KeyCode::Esc => {
+                    return Ok(TOGGLE_MENU);
+                }
+                _ => {}
+            }
+        }
+
+        Ok(DEFAULT)
     }
 }
 
