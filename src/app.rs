@@ -14,7 +14,7 @@ use ratatui::{
     widgets::{Block, Borders, Widget, WidgetRef},
 };
 
-use crate::my_widgets::get_center_rect;
+use crate::my_widgets::{get_center_rect, HandleEvent}; // Ensure HandleEvent is imported
 
 const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
 
@@ -91,8 +91,11 @@ impl Table {
             {
                 match code {
                     KeyCode::Esc => self.toggle_menu(),
-                    KeyCode::Enter => {}
-                    _ => {}
+                    _ => {
+                        
+                        let current_app = self.get_current_app();
+                        current_app.handle_event(event)?;
+                    }
                 }
             }
         }
@@ -107,28 +110,9 @@ impl Table {
         {
             match code {
                 KeyCode::Esc => self.toggle_menu(),
-                KeyCode::Enter => {
-                    if let Some(index) = self.menu.state.selected() {
-                        self.current_app = index;
-                        self.toggle_menu();
-                    }
+                _ => {
+                    self.get_current_app();
                 }
-                KeyCode::Char('q') => {
-                    if self.menu.show {
-                        return Ok(false);
-                    }
-                }
-                KeyCode::Up => {
-                    if self.menu.show {
-                        self.menu.state.select_previous();
-                    }
-                }
-                KeyCode::Down => {
-                    if self.menu.show {
-                        self.menu.state.select_next();
-                    }
-                }
-                _ => {}
             }
         }
         Ok(true)
@@ -148,8 +132,8 @@ impl Table {
         self.menu.show = !self.menu.show;
     }
 
-    pub fn get_current_app(&self) -> usize {
-        self.current_app
+    pub fn get_current_app(&self) -> &Box<dyn WidgetRef> {
+        &self.apps[self.current_app].1
     }
 
     pub fn get_apps(&self) -> Vec<String> {

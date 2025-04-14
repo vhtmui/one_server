@@ -6,6 +6,10 @@ use ratatui::{
     buffer::Buffer, crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyEventKind}, layout::Rect, widgets::{block::title, Block, Borders, List, Widget, WidgetRef}, Frame
 };
 
+pub trait HandleEvent {
+    fn handle_event(&self, event: Event) -> Result<bool, Box<dyn std::error::Error>>;
+}
+
 pub struct FileMonitor {
     title: String,
     lunch_datatime: DateTime<Local>,
