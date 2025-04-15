@@ -3,27 +3,9 @@ mod file_monitor;
 mod my_widgets;
 
 use macro_rules_attribute::apply;
-use my_widgets::FileMonitor;
-use std::{
-    io::{Stdout, stdout},
-    time::Duration,
-};
-
-use ::crossterm::terminal::{self, enable_raw_mode};
-use app::Table;
-use ratatui::{
-    Terminal,
-    crossterm::{
-        self,
-        event::{EnableMouseCapture, poll},
-        execute,
-        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode},
-    },
-    prelude::CrosstermBackend,
-    widgets::{Widget, WidgetRef},
-};
-use smol::{self, lock::futures::BarrierWait};
 use smol_macros::main;
+
+use crate::{app::Table, file_monitor::FileMonitor};
 
 #[apply(main!)]
 async fn main() {

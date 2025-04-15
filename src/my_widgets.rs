@@ -1,83 +1,9 @@
-use std::thread::sleep;
+use ratatui::{crossterm::event::Event, layout::Rect, widgets::WidgetRef};
 
-use chrono::{DateTime, Local, TimeZone};
-use ratatui::{
-    Frame,
-    buffer::Buffer,
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
-    layout::Rect,
-    widgets::{Block, Borders, List, Widget, WidgetRef, block::title},
-};
-
-use crate::app::{DEFAULT, EXIT_PROGRESS, TOGGLE_MENU};
-use crate::file_monitor::Monitor;
+use crate::app::AppAction;
 
 pub trait MyWidgets: WidgetRef {
-    fn handle_event(&mut self, event: Event) -> Result<char, std::io::Error>;
-}
-
-pub struct FileMonitor {
-    title: String,
-    lunch_datatime: DateTime<Local>,
-    monitor_status: bool,
-    files_got: usize,
-    files_recorded: usize,
-    monitor: Monitor,
-}
-
-impl FileMonitor {
-    pub fn new(title: String, path: String) -> Self {
-        FileMonitor {
-            title: title,
-            lunch_datatime: Local::now(),
-            monitor_status: false,
-            files_got: 0,
-            files_recorded: 0,
-            monitor: Monitor::new(path),
-        }
-    }
-    pub fn start_monitor(&'static mut self) {
-
-        self.monitor.start_monitor().unwrap();
-    }
-}
-
-impl WidgetRef for FileMonitor {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title(&*self.title);
-        block.render(area, buf);
-    }
-}
-
-impl MyWidgets for FileMonitor {
-    fn handle_event(&mut self, event: Event) -> Result<char, std::io::Error> {
-        if let Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Release,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Esc => {
-                    return Ok(TOGGLE_MENU);
-                }
-                KeyCode::Enter => {
-                    print!("should start monitor?\n");
-                    if let Event::Key(KeyEvent {
-                        code: KeyCode::Enter,
-                        kind: KeyEventKind::Press,
-                        ..
-                    }) = read().unwrap()
-                    {
-                        self.start_monitor();
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        Ok(DEFAULT)
-    }
+    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error>;
 }
 
 pub fn get_center_rect(area: Rect, width_percentage: f32, height_percentage: f32) -> Rect {

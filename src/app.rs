@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Stdout;
 use std::{ops::Deref, time::Duration};
 
@@ -14,13 +13,19 @@ use ratatui::{
     widgets::{Block, Borders, Widget, WidgetRef},
 };
 
-use crate::my_widgets::{MyWidgets, get_center_rect}; // Ensure HandleEvent is imported
+use crate::{
+    app::AppAction::*,
+    my_widgets::{MyWidgets, get_center_rect},
+};
 
 pub const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
 
-pub const DEFAULT: char = 'D';
-pub const TOGGLE_MENU: char = 'M';
-pub const EXIT_PROGRESS: char = 'E';
+#[derive(PartialEq, Eq)]
+pub enum AppAction {
+    Default,
+    ToggleMenu,
+    ExitProgress,
+}
 
 pub struct Menu {
     show: bool,
@@ -57,7 +62,7 @@ impl Table {
             if poll(Duration::from_millis(0))? {
                 let event = read()?;
 
-                if let Ok(EXIT_PROGRESS) = self.handle_event(event) {
+                if let Ok(ExitProgress) = self.handle_event(event) {
                     break;
                 }
             } else {
@@ -82,7 +87,7 @@ impl Table {
         StatefulWidget::render(menu_list, area, buf, &mut self.menu.state);
     }
 
-    pub fn handle_event(&mut self, event: Event) -> Result<char, std::io::Error> {
+    pub fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
         let result = if self.menu.show {
             self.handle_menu_event(event)
         } else {
@@ -90,17 +95,17 @@ impl Table {
         };
 
         match result {
-            Ok(EXIT_PROGRESS) => Ok(EXIT_PROGRESS),
-            Ok(TOGGLE_MENU) => {
+            Ok(ExitProgress) => Ok(ExitProgress),
+            Ok(ToggleMenu) => {
                 self.toggle_menu();
-                Ok(DEFAULT)
+                Ok(Default)
             }
-            Ok(_) => Ok(DEFAULT),
+            Ok(Default) => Ok(Default),
             Err(e) => Err(e),
         }
     }
 
-    fn handle_menu_event(&mut self, event: Event) -> Result<char, std::io::Error> {
+    fn handle_menu_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
         if let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Release,
@@ -117,7 +122,7 @@ impl Table {
                 }
                 KeyCode::Char('q') => {
                     if self.menu.show {
-                        return Ok(EXIT_PROGRESS);
+                        return Ok(ExitProgress);
                     }
                 }
                 KeyCode::Up => {
@@ -133,7 +138,7 @@ impl Table {
                 _ => {}
             }
         }
-        Ok(DEFAULT)
+        Ok(Default)
     }
 
     pub fn add_widgets(mut self, name: String, widgets: Box<dyn MyWidgets>) -> Self {
