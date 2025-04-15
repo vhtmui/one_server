@@ -36,7 +36,7 @@ impl FileMonitor {
             monitor: Monitor::new(path),
         }
     }
-    pub fn start_monitor(&mut self) {
+    pub fn start_monitor(&'static mut self) {
 
         self.monitor.start_monitor().unwrap();
     }
