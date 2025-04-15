@@ -88,10 +88,15 @@ impl Table {
         } else {
             self.get_current_app().handle_event(event)
         };
-        if result.is_ok() && result.unwrap() == EXIT_PROGRESS {
-            Ok(EXIT_PROGRESS)
-        } else {
-            Ok(DEFAULT)
+
+        match result {
+            Ok(EXIT_PROGRESS) => Ok(EXIT_PROGRESS),
+            Ok(TOGGLE_MENU) => {
+                self.toggle_menu();
+                Ok(DEFAULT)
+            }
+            Ok(_) => Ok(DEFAULT),
+            Err(e) => Err(e),
         }
     }
 
@@ -145,8 +150,8 @@ impl Table {
         self.menu.show = !self.menu.show;
     }
 
-    pub fn get_current_app(&self) -> &Box<dyn MyWidgets> {
-        &self.apps[self.current_app].1
+    pub fn get_current_app(&mut self) -> &mut Box<dyn MyWidgets> {
+        &mut self.apps[self.current_app].1
     }
 
     pub fn get_apps(&self) -> Vec<String> {

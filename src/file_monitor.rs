@@ -13,6 +13,7 @@ pub struct Monitor {
     service_status: bool,
     files_got: usize,
     files_recorded: usize,
+    handle: Option<thread::JoinHandle<Result<()>>>,
 }
 
 impl Monitor {
@@ -24,6 +25,7 @@ impl Monitor {
             service_status: false,
             files_got: 0,
             files_recorded: 0,
+            handle: None,
         }
     }
 
@@ -31,26 +33,21 @@ impl Monitor {
         let path = self.path.clone();
 
         let handle = thread::spawn(move || {
-            // 修改闭包返回类型为 Result<()>
             if let Err(e) = Self::inner_monitor(&path) {
                 eprintln!("Error in file monitoring thread: {:?}", e);
-                return Err(e); // 返回错误给主线程
+                return Err(e);
             }
             Ok(())
         });
 
-        // 等待子线程完成，并捕获可能的错误
-        match handle.join() {
-            Ok(result) => result,
-            Err(_) => Err(notify::Error::generic("Thread panicked".into())),
-        }
+        self.handle = Some(handle);
+
+        Ok(())
     }
 
-    // 将核心逻辑提取到单独函数中
     fn inner_monitor(path: &str) -> Result<()> {
         let (tx, rx) = mpsc::channel::<Result<Event>>();
 
-        // 使用 ? 操作符处理错误
         let mut watcher = notify::recommended_watcher(tx)?;
 
         watcher.watch(Path::new(path), RecursiveMode::Recursive)?;
@@ -62,7 +59,7 @@ impl Monitor {
                 }
                 Err(e) => {
                     eprintln!("Watch error: {:?}", e);
-                    break; // 遇到接收错误时退出循环
+                    break;
                 }
             }
         }
@@ -70,9 +67,7 @@ impl Monitor {
         Ok(())
     }
 
-    // 示例分析函数，可以根据实际需求进行修改
     fn analyze_content(content: &str) -> String {
-        // 这里可以添加具体的分析逻辑
         content.to_string()
     }
 }

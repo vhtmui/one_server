@@ -1,6 +1,6 @@
 mod app;
-mod my_widgets;
 mod file_monitor;
+mod my_widgets;
 
 use macro_rules_attribute::apply;
 use my_widgets::FileMonitor;
@@ -31,20 +31,13 @@ async fn main() {
 
     let app = Table::new();
 
+    let path = "C:\\Users\\Administrator\\Desktop\\session.log".to_string();
     let file_monitor = (
         String::from("file_monitor"),
-        Box::new(FileMonitor::new("file_monitor".to_string())),
-    );
-    let file_monitor2 = (
-        String::from("file_monitor2"),
-        Box::new(FileMonitor::new("file_monitor2".to_string())),
-    );
-    let file_monitor3 = (
-        String::from("file_monitor3"),
-        Box::new(FileMonitor::new("file_monitor3".to_string())),
+        Box::new(FileMonitor::new("file_monitor".to_string(), path)),
     );
 
-    add_widgets!(app, file_monitor, file_monitor2, file_monitor3)
+    add_widgets!(app, file_monitor)
         .set_current_app(0)
         .run(&mut terminal)
         .await

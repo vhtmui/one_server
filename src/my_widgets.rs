@@ -1,7 +1,6 @@
 use std::thread::sleep;
 
 use chrono::{DateTime, Local, TimeZone};
-use crossterm::event;
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -11,9 +10,10 @@ use ratatui::{
 };
 
 use crate::app::{DEFAULT, EXIT_PROGRESS, TOGGLE_MENU};
+use crate::file_monitor::Monitor;
 
 pub trait MyWidgets: WidgetRef {
-    fn handle_event(&self, event: Event) -> Result<char, std::io::Error>;
+    fn handle_event(&mut self, event: Event) -> Result<char, std::io::Error>;
 }
 
 pub struct FileMonitor {
@@ -22,20 +22,23 @@ pub struct FileMonitor {
     monitor_status: bool,
     files_got: usize,
     files_recorded: usize,
+    monitor: Monitor,
 }
 
 impl FileMonitor {
-    pub fn new(title: String) -> Self {
+    pub fn new(title: String, path: String) -> Self {
         FileMonitor {
             title: title,
             lunch_datatime: Local::now(),
             monitor_status: false,
             files_got: 0,
             files_recorded: 0,
+            monitor: Monitor::new(path),
         }
     }
     pub fn start_monitor(&mut self) {
-        
+
+        self.monitor.start_monitor().unwrap();
     }
 }
 
@@ -47,7 +50,7 @@ impl WidgetRef for FileMonitor {
 }
 
 impl MyWidgets for FileMonitor {
-    fn handle_event(&self, event: Event) -> Result<char, std::io::Error> {
+    fn handle_event(&mut self, event: Event) -> Result<char, std::io::Error> {
         if let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Release,
@@ -57,6 +60,17 @@ impl MyWidgets for FileMonitor {
             match code {
                 KeyCode::Esc => {
                     return Ok(TOGGLE_MENU);
+                }
+                KeyCode::Enter => {
+                    print!("should start monitor?\n");
+                    if let Event::Key(KeyEvent {
+                        code: KeyCode::Enter,
+                        kind: KeyEventKind::Press,
+                        ..
+                    }) = read().unwrap()
+                    {
+                        self.start_monitor();
+                    }
                 }
                 _ => {}
             }
