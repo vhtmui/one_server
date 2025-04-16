@@ -9,7 +9,7 @@ use notify::{Event as NotifyEvent, RecursiveMode, Result as NotifyResult, Watche
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, read},
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Borders, Widget, WidgetRef},
 };
 
@@ -19,66 +19,37 @@ use crate::{
     my_widgets::MyWidgets,
 };
 
-pub struct FileMonitor {
-    title: String,
-    monitor: Monitor,
+#[derive(Default)]
+pub struct FileAnalyzer {
+    files_watched: Vec<WatchFileInfo>,
+    files_got: usize,
+    files_recorded: usize,
 }
 
-impl FileMonitor {
-    pub fn new(title: String, path: String) -> Self {
-        FileMonitor {
-            title: title,
-            monitor: Monitor::new(path),
-        }
-    }
-    pub fn start_monitor(&mut self) {
-        self.monitor.start_monitor().unwrap();
-    }
+pub struct WatchFileInfo {
+    path: PathBuf,
+    last_size: usize,
+    last_byte_read_to: usize,
 }
 
-impl WidgetRef for FileMonitor {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title(&*self.title);
-        block.render(area, buf);
-    }
+pub enum MonitorEventType {
+    CreatedFile,
+    ModifiedFile,
+    DeletedFile,
 }
 
-impl MyWidgets for FileMonitor {
-    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
-        if let Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Release,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Esc => {
-                    return Ok(ToggleMenu);
-                }
-                KeyCode::Enter => {
-                    if let Event::Key(KeyEvent {
-                        code: KeyCode::Enter,
-                        kind: KeyEventKind::Press,
-                        ..
-                    }) = read().unwrap()
-                    {
-                        if self.monitor.get_status_text() == MonitorStatus::Stopped {
-                            self.start_monitor();
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        Ok(Default)
-    }
+#[derive(Clone, PartialEq, Eq)]
+pub enum MonitorStatus {
+    Running,
+    Stopped,
+    Paused,
+    Error,
 }
 
-pub struct Monitor {
-    path: String,
-    shared_state: Arc<Mutex<SharedState>>,
-    handle: Option<thread::JoinHandle<()>>,
+pub struct MonitorEvent {
+    time: Option<DateTime<FixedOffset>>,
+    event_type: MonitorEventType,
+    message: String,
 }
 
 struct SharedState {
@@ -87,6 +58,21 @@ struct SharedState {
     status: MonitorStatus,
     file_analyzer: FileAnalyzer,
     events: VecDeque<MonitorEvent>,
+}
+
+impl SharedState {
+    fn add_event(&mut self, event: MonitorEvent) {
+        if self.events.len() == 10 {
+            self.events.pop_front();
+        }
+        self.events.push_back(event);
+    }
+}
+
+pub struct Monitor {
+    path: String,
+    shared_state: Arc<Mutex<SharedState>>,
+    handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Monitor {
@@ -163,44 +149,81 @@ impl Monitor {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub enum MonitorStatus {
-    Running,
-    Stopped,
-    Paused,
-    Error,
+pub struct FileMonitor {
+    title: String,
+    monitor: Monitor,
 }
 
-pub struct MonitorEvent {
-    time: Option<DateTime<FixedOffset>>,
-    event_type: MonitorEventType,
-    message: String,
-}
-
-#[derive(Default)]
-pub struct FileAnalyzer {
-    files_watched: Vec<WatchFileInfo>,
-    files_got: usize,
-    files_recorded: usize,
-}
-
-pub struct WatchFileInfo {
-    path: PathBuf,
-    last_size: usize,
-    last_byte_read_to: usize,
-}
-
-pub enum MonitorEventType {
-    CreatedFile,
-    ModifiedFile,
-    DeletedFile,
-}
-
-impl SharedState {
-    fn add_event(&mut self, event: MonitorEvent) {
-        if self.events.len() == 10 {
-            self.events.pop_front();
+impl FileMonitor {
+    pub fn new(title: String, path: String) -> Self {
+        FileMonitor {
+            title: title,
+            monitor: Monitor::new(path),
         }
-        self.events.push_back(event);
+    }
+
+    pub fn get_layout_areas(&self, area: Rect) -> (Rect, Rect, Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(area);
+
+        let left_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(chunks[0]);
+
+        (left_chunks[0], left_chunks[1], chunks[1])
+    }
+
+    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
+        let block = Block::new().borders(Borders::ALL).title("control panel");
+    }
+
+    pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {}
+
+    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {}
+
+    pub fn start_monitor(&mut self) {
+        self.monitor.start_monitor().unwrap();
+    }
+}
+
+impl WidgetRef for FileMonitor {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        let block = Block::new().borders(Borders::ALL).title(&*self.title);
+        block.render(area, buf);
+    }
+}
+
+impl MyWidgets for FileMonitor {
+    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
+        if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Release,
+            ..
+        }) = event
+        {
+            match code {
+                KeyCode::Esc => {
+                    return Ok(ToggleMenu);
+                }
+                KeyCode::Enter => {
+                    if let Event::Key(KeyEvent {
+                        code: KeyCode::Enter,
+                        kind: KeyEventKind::Press,
+                        ..
+                    }) = read().unwrap()
+                    {
+                        if self.monitor.get_status_text() == MonitorStatus::Stopped {
+                            self.start_monitor();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Default)
     }
 }
