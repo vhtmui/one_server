@@ -17,6 +17,7 @@ use crate::{
     apps::AppAction::{self, *},
     file_monitor::MonitorStatus::*,
     my_widgets::MyWidgets,
+    menu,
 };
 
 pub struct FileMonitor {
@@ -115,6 +116,10 @@ impl FileMonitor {
     pub fn render_block(&self, title: String, area: Rect, buf: &mut Buffer) {
         let block = Block::new().borders(Borders::ALL).title(title);
         block.render(area, buf);
+    }
+    
+    pub fn render_menu(&self, area: Rect, buf: &mut Buffer) {
+
     }
 }
 
