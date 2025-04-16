@@ -14,42 +14,20 @@ use ratatui::{
 };
 
 use crate::{
-    app::AppAction::{self, *},
+    apps::AppAction::{self, *},
     file_monitor::MonitorStatus::*,
     my_widgets::MyWidgets,
 };
 
-#[derive(Default)]
-pub struct FileAnalyzer {
-    files_watched: Vec<WatchFileInfo>,
-    files_got: usize,
-    files_recorded: usize,
+pub struct FileMonitor {
+    title: String,
+    monitor: Monitor,
 }
 
-pub struct WatchFileInfo {
-    path: PathBuf,
-    last_size: usize,
-    last_byte_read_to: usize,
-}
-
-pub enum MonitorEventType {
-    CreatedFile,
-    ModifiedFile,
-    DeletedFile,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub enum MonitorStatus {
-    Running,
-    Stopped,
-    Paused,
-    Error,
-}
-
-pub struct MonitorEvent {
-    time: Option<DateTime<FixedOffset>>,
-    event_type: MonitorEventType,
-    message: String,
+pub struct Monitor {
+    path: String,
+    shared_state: Arc<Mutex<SharedState>>,
+    handle: Option<thread::JoinHandle<()>>,
 }
 
 struct SharedState {
@@ -60,19 +38,124 @@ struct SharedState {
     events: VecDeque<MonitorEvent>,
 }
 
-impl SharedState {
-    fn add_event(&mut self, event: MonitorEvent) {
-        if self.events.len() == 10 {
-            self.events.pop_front();
+#[derive(Clone, PartialEq, Eq)]
+pub enum MonitorStatus {
+    Running,
+    Stopped,
+    Paused,
+    Error,
+}
+
+#[derive(Default)]
+pub struct FileAnalyzer {
+    files_watched: Vec<FileWhatchInfo>,
+    files_got: usize,
+    files_recorded: usize,
+}
+
+pub struct FileWhatchInfo {
+    path: PathBuf,
+    last_size: usize,
+    last_byte_read_to: usize,
+}
+
+pub struct MonitorEvent {
+    time: Option<DateTime<FixedOffset>>,
+    event_type: MonitorEventType,
+    message: String,
+}
+
+pub enum MonitorEventType {
+    CreatedFile,
+    ModifiedFile,
+    DeletedFile,
+}
+
+impl FileMonitor {
+    pub fn new(title: String, path: String) -> Self {
+        FileMonitor {
+            title: title,
+            monitor: Monitor::new(path),
         }
-        self.events.push_back(event);
+    }
+
+    pub fn get_layout_areas(area: Rect) -> (Rect, Rect, Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(area);
+
+        let left_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(chunks[0]);
+
+        (left_chunks[0], left_chunks[1], chunks[1])
+    }
+
+    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
+        let chunks = Self::get_layout_areas(area).0;
+        self.render_block("Control Panel".to_string(), chunks, buf);
+    }
+
+    pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {
+        let chunks = Self::get_layout_areas(area).1;
+        self.render_block("Status Area".to_string(), chunks, buf);
+    }
+
+    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {
+        let chunks = Self::get_layout_areas(area).2;
+        self.render_block("Log Area".to_string(), chunks, buf);
+    }
+
+    pub fn start_monitor(&mut self) {
+        self.monitor.start_monitor().unwrap();
+    }
+
+    pub fn render_block(&self, title: String, area: Rect, buf: &mut Buffer) {
+        let block = Block::new().borders(Borders::ALL).title(title);
+        block.render(area, buf);
     }
 }
 
-pub struct Monitor {
-    path: String,
-    shared_state: Arc<Mutex<SharedState>>,
-    handle: Option<thread::JoinHandle<()>>,
+impl WidgetRef for FileMonitor {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        self.render_control_panel(area, buf);
+        self.render_status_area(area, buf);
+        self.render_log_area(area, buf);
+    }
+}
+
+impl MyWidgets for FileMonitor {
+    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
+        if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Release,
+            ..
+        }) = event
+        {
+            match code {
+                KeyCode::Esc => {
+                    return Ok(ToggleMenu);
+                }
+                KeyCode::Enter => {
+                    if let Event::Key(KeyEvent {
+                        code: KeyCode::Enter,
+                        kind: KeyEventKind::Press,
+                        ..
+                    }) = read().unwrap()
+                    {
+                        if self.monitor.get_status_text() == MonitorStatus::Stopped {
+                            self.start_monitor();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Default)
+    }
 }
 
 impl Monitor {
@@ -149,81 +232,11 @@ impl Monitor {
     }
 }
 
-pub struct FileMonitor {
-    title: String,
-    monitor: Monitor,
-}
-
-impl FileMonitor {
-    pub fn new(title: String, path: String) -> Self {
-        FileMonitor {
-            title: title,
-            monitor: Monitor::new(path),
+impl SharedState {
+    fn add_event(&mut self, event: MonitorEvent) {
+        if self.events.len() == 10 {
+            self.events.pop_front();
         }
-    }
-
-    pub fn get_layout_areas(&self, area: Rect) -> (Rect, Rect, Rect) {
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(area);
-
-        let left_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(chunks[0]);
-
-        (left_chunks[0], left_chunks[1], chunks[1])
-    }
-
-    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title("control panel");
-    }
-
-    pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {}
-
-    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {}
-
-    pub fn start_monitor(&mut self) {
-        self.monitor.start_monitor().unwrap();
-    }
-}
-
-impl WidgetRef for FileMonitor {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title(&*self.title);
-        block.render(area, buf);
-    }
-}
-
-impl MyWidgets for FileMonitor {
-    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
-        if let Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Release,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Esc => {
-                    return Ok(ToggleMenu);
-                }
-                KeyCode::Enter => {
-                    if let Event::Key(KeyEvent {
-                        code: KeyCode::Enter,
-                        kind: KeyEventKind::Press,
-                        ..
-                    }) = read().unwrap()
-                    {
-                        if self.monitor.get_status_text() == MonitorStatus::Stopped {
-                            self.start_monitor();
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        Ok(Default)
+        self.events.push_back(event);
     }
 }

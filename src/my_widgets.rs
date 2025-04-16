@@ -1,6 +1,6 @@
 use ratatui::{crossterm::event::Event, layout::Rect, widgets::WidgetRef};
 
-use crate::app::AppAction;
+use crate::apps::AppAction;
 
 pub trait MyWidgets: WidgetRef {
     fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error>;

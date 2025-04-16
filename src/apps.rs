@@ -4,6 +4,7 @@ use std::{ops::Deref, time::Duration};
 use chrono::Local;
 use ratatui::layout::Rect;
 use ratatui::prelude::CrosstermBackend;
+use ratatui::style::Styled;
 use ratatui::widgets::{self, HighlightSpacing, List, ListState, StatefulWidget};
 use ratatui::{
     Frame, Terminal,
@@ -14,11 +15,12 @@ use ratatui::{
 };
 
 use crate::{
-    app::AppAction::*,
+    apps::AppAction::*,
     my_widgets::{MyWidgets, get_center_rect},
 };
 
 pub const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
 
 #[derive(PartialEq, Eq)]
 pub enum AppAction {
@@ -27,25 +29,25 @@ pub enum AppAction {
     ExitProgress,
 }
 
-pub struct Menu {
+pub struct AppsMenu {
     show: bool,
     state: ListState,
 }
 
-pub struct Table {
+pub struct Apps {
     apps: Vec<(String, Box<dyn MyWidgets>)>,
     current_app: usize,
-    menu: Menu,
+    menu: AppsMenu,
 }
 
-impl Table {
+impl Apps {
     pub fn new() -> Self {
         let mut state = ListState::default();
         state.select(Some(0));
-        Table {
+        Apps {
             apps: Vec::new(),
             current_app: 0,
-            menu: Menu { show: false, state },
+            menu: AppsMenu { show: false, state },
         }
     }
 
@@ -74,7 +76,10 @@ impl Table {
     }
 
     pub fn render_menu(&mut self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title("Menu");
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .title("Menu")
+            .set_style(MENU_STYLE);
 
         let apps = self.get_apps();
 
@@ -162,9 +167,17 @@ impl Table {
     pub fn get_apps(&self) -> Vec<String> {
         self.apps.iter().map(|x| x.0.clone()).collect()
     }
+
+    pub fn clear_area(area: Rect, buf: &mut Buffer){
+        for x in area.left()..area.right() {
+            for y in area.top()..area.bottom() {
+                buf[(x, y)].reset();
+            }
+        }
+    }
 }
 
-impl Widget for &mut Table {
+impl Widget for &mut Apps {
     fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -175,7 +188,10 @@ impl Widget for &mut Table {
 
         // Render the menu if show
         if self.menu.show {
-            self.render_menu(get_center_rect(area, 0.5, 0.5), buf);
+            let area = get_center_rect(area, 0.5, 0.5);
+
+            Apps::clear_area(area, buf);
+            self.render_menu(area, buf);
         }
     }
 }
