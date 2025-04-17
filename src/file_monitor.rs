@@ -17,7 +17,7 @@ use crate::{
     apps::AppAction::{self, *},
     file_monitor::MonitorStatus::*,
     my_widgets::MyWidgets,
-    menu,
+    menu::{Menu, MenuItem},
 };
 
 pub struct FileMonitor {
