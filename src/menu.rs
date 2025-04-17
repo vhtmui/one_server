@@ -1,20 +1,16 @@
-use ratatui::layout::{Constraint, Direction, Layout};
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use ratatui::widgets::WidgetRef;
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Rect},
+    widgets::{StatefulWidgetRef, WidgetRef},
+};
+use serde::{Deserialize, Serialize};
 
 use crate::my_widgets::MyWidgets;
 
-// 定义一个辅助结构体，用于序列化和反序列化 Menu
-#[derive(Serialize, Deserialize, Debug)]
-struct SerializableMenu {
-    pub name: String,
-    pub children: Vec<SerializableMenuItem>,
-}
-
-// 定义一个辅助结构体，用于序列化和反序列化
+// 定义一个辅助结构体，用于序列化和反序列化 MenuItem
 #[derive(Serialize, Deserialize, Debug)]
 struct SerializableMenuItem {
     pub name: String,
@@ -22,19 +18,19 @@ struct SerializableMenuItem {
     pub children: Vec<SerializableMenuItem>,
 }
 
-#[derive(Debug)]
-pub struct Menu {
-    pub name: String,
-    pub children: Vec<Rc<RefCell<MenuItem>>>,
+#[derive(Default, Debug)]
+pub struct MenuItem {
+    name: String,
+    content: String,
+    children: Vec<Rc<RefCell<MenuItem>>>,
+    selected: bool,
+    parent: Weak<RefCell<MenuItem>>,
 }
 
-#[derive(Debug)]
-pub struct MenuItem {
-    pub name: String,
-    pub content: String,
-    pub children: Vec<Rc<RefCell<MenuItem>>>,
-    pub selected: bool,
-    pub parent: Weak<RefCell<MenuItem>>,
+// 定义 MenuState 结构体
+#[derive(Debug, Default, Clone)]
+pub struct MenuState {
+    pub selected_indices: Vec<usize>,
 }
 
 impl MenuItem {
@@ -51,6 +47,18 @@ impl MenuItem {
             selected: false,
             parent,
         }
+    }
+
+    // 从 JSON 字符串反序列化为 MenuItem
+    pub fn from_json(json_str: &str) -> Result<Rc<RefCell<MenuItem>>, serde_json::Error> {
+        let serializable_item: SerializableMenuItem = serde_json::from_str(json_str)?;
+        Ok(Self::from_serializable(serializable_item, Weak::new()))
+    }
+
+    // 序列化 MenuItem 为 JSON 字符串
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        let serializable_item = self.to_serializable();
+        serde_json::to_string(&serializable_item)
     }
 
     // 从可序列化的形式重建 MenuItem
@@ -87,6 +95,9 @@ impl MenuItem {
                 .collect(),
         }
     }
+
+    fn render_left(&self, children: &Vec<Rc<RefCell<MenuItem>>>, area: Rect, buf: &mut Buffer) {}
+    fn render_right(&self, children: &Vec<Rc<RefCell<MenuItem>>>, area: Rect, buf: &mut Buffer) {}
 }
 
 impl PartialEq for MenuItem {
@@ -105,51 +116,87 @@ impl PartialEq for MenuItem {
 
 impl Eq for MenuItem {}
 
-impl Menu {
-    pub fn new(name: String, children: Vec<Rc<RefCell<MenuItem>>>) -> Self {
-        Menu { name, children }
-    }
-
-    // 从 JSON 字符串反序列化为 Menu
-    pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
-        let serializable_menu: SerializableMenu = serde_json::from_str(json_str)?;
-        Ok(Self::build_menu(serializable_menu))
-    }
-
-    fn build_menu(menu: SerializableMenu) -> Self {
-        let mut new_children = Vec::new();
-        for item in menu.children {
-            new_children.push(MenuItem::from_serializable(item, Weak::new()));
-        }
-        Menu {
-            name: menu.name,
-            children: new_children,
-        }
-    }
-
-    // 序列化 Menu 为 JSON 字符串
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        let serializable_children: Vec<SerializableMenuItem> = self
-            .children
-            .iter()
-            .map(|child| child.borrow().to_serializable())
-            .collect();
-        let serializable_menu = SerializableMenu {
-            name: self.name.clone(),
-            children: serializable_children,
-        };
-        serde_json::to_string(&serializable_menu)
-    }
+impl WidgetRef for MenuItem {
+    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {}
 }
 
-impl WidgetRef for Menu {
-    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
+impl StatefulWidgetRef for MenuItem {
+    type State = MenuState;
+    fn render_ref(
+        &self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut Self::State,
+    ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
 
-        
+        // 判断是否有选中的菜单项
+        if state.selected_indices.len() > 0 {
+            // 判断选中的菜单项是否为第一级菜单
+            if state.selected_indices.len() == 1 {
+                let index = state.selected_indices[0];
+
+                self.render_left(&self.children, chunks[0], buf);
+
+                if self.children[index].borrow().children.len() > 0 {
+                    self.render_right(&self.children[index].borrow().children, chunks[1], buf);
+                }
+            } else if state.selected_indices.len() > 1 {
+                let mut last_item = &Rc::new(RefCell::new(MenuItem::default()));
+
+                for i in 0..state.selected_indices.len() - 1 {
+                    last_item = &self.children[state.selected_indices[i]];
+                }
+
+                // 判断是否有子菜单
+                if last_item.borrow().children.len() > 0 {
+                    self.render_left(
+                        &last_item
+                            .borrow()
+                            .parent
+                            .upgrade()
+                            .unwrap()
+                            .borrow()
+                            .children,
+                        chunks[0],
+                        buf,
+                    );
+                    self.render_right(&last_item.borrow().children, chunks[1], buf);
+                } else {
+                    self.render_left(
+                        &last_item
+                            .borrow()
+                            .parent
+                            .upgrade()
+                            .unwrap()
+                            .borrow()
+                            .parent
+                            .upgrade()
+                            .unwrap()
+                            .borrow()
+                            .children,
+                        area,
+                        buf,
+                    );
+                    self.render_right(
+                        &last_item
+                            .borrow()
+                            .parent
+                            .upgrade()
+                            .unwrap()
+                            .borrow()
+                            .children,
+                        area,
+                        buf,
+                    );
+                }
+            }
+        } else {
+            self.render_left(&self.children, area, buf);
+        }
     }
 }
 
@@ -158,6 +205,7 @@ fn test_menu_builder() {
     let json_data = r#"
         {
           "name": "Main Menu",
+          "content": "This is the main menu.",
           "children": [
             {
               "name": "Home",
@@ -184,25 +232,26 @@ fn test_menu_builder() {
         }
         "#;
 
-    let menu = Menu::from_json(json_data).unwrap();
+    let root = MenuItem::from_json(json_data).unwrap();
 
     // 验证根节点
-    assert_eq!(menu.name, "Main Menu");
-    assert_eq!(menu.children.len(), 2);
+    assert_eq!(root.borrow().name, "Main Menu");
+    assert_eq!(root.borrow().content, "This is the main menu.");
+    assert_eq!(root.borrow().children.len(), 2);
 
     // 验证 Home 节点
-    let home = &menu.children[0];
+    let home = &root.borrow().children[0];
     assert_eq!(home.borrow().name, "Home");
     assert_eq!(home.borrow().content, "This is the home page.");
     assert_eq!(home.borrow().children.len(), 0);
-    assert!(home.borrow().parent.upgrade().is_none());
+    assert!(home.borrow().parent.upgrade().is_some());
 
     // 验证 Settings 节点
-    let settings = &menu.children[1];
+    let settings = &root.borrow().children[1];
     assert_eq!(settings.borrow().name, "Settings");
     assert_eq!(settings.borrow().content, "This is the settings page.");
     assert_eq!(settings.borrow().children.len(), 2);
-    assert!(settings.borrow().parent.upgrade().is_none());
+    assert!(settings.borrow().parent.upgrade().is_some());
 
     // 验证 Audio 节点
     let audio = &settings.borrow().children[0];

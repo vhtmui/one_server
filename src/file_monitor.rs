@@ -1,11 +1,13 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, mpsc};
-use std::thread;
+use std::thread::{self};
 use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset, Utc};
 use notify::{Event as NotifyEvent, RecursiveMode, Result as NotifyResult, Watcher};
+use ratatui::widgets::StatefulWidgetRef;
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, read},
@@ -16,12 +18,13 @@ use ratatui::{
 use crate::{
     apps::AppAction::{self, *},
     file_monitor::MonitorStatus::*,
+    menu::{MenuItem, MenuState},
     my_widgets::MyWidgets,
-    menu::{Menu, MenuItem},
 };
 
 pub struct FileMonitor {
     title: String,
+    menu_state: RefCell<MenuState>,
     monitor: Monitor,
 }
 
@@ -75,6 +78,7 @@ pub enum MonitorEventType {
 impl FileMonitor {
     pub fn new(title: String, path: String) -> Self {
         FileMonitor {
+            menu_state: RefCell::new(MenuState::default()),
             title: title,
             monitor: Monitor::new(path),
         }
@@ -97,6 +101,7 @@ impl FileMonitor {
     pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
         let chunks = Self::get_layout_areas(area).0;
         self.render_block("Control Panel".to_string(), chunks, buf);
+        self.render_menu(chunks, buf);
     }
 
     pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {
@@ -117,9 +122,42 @@ impl FileMonitor {
         let block = Block::new().borders(Borders::ALL).title(title);
         block.render(area, buf);
     }
-    
-    pub fn render_menu(&self, area: Rect, buf: &mut Buffer) {
 
+    pub fn render_menu(&self, area: Rect, buf: &mut Buffer) {
+        let json_data = r#"
+        {
+          "name": "Main Menu",
+          "content": "This is the main menu.",
+          "children": [
+            {
+              "name": "Home",
+              "content": "This is the home page.",
+              "children": []
+            },
+            {
+              "name": "Settings",
+              "content": "This is the settings page.",
+              "children": [
+                {
+                  "name": "Audio",
+                  "content": "This is the audio settings page.",
+                  "children": []
+                },
+                {
+                  "name": "Video",
+                  "content": "This is the video settings page.",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let mut state = self.menu_state.borrow_mut();
+        if let Ok(menu_item) = MenuItem::from_json(json_data) {
+            StatefulWidgetRef::render_ref(&*menu_item.borrow(), area, buf, &mut *state);
+        }
     }
 }
 
