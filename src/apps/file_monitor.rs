@@ -187,16 +187,21 @@ impl MyWidgets for FileMonitor {
                     return Ok(ToggleMenu);
                 }
                 KeyCode::Enter => {
-                    if let Event::Key(KeyEvent {
-                        code: KeyCode::Enter,
-                        kind: KeyEventKind::Press,
-                        ..
-                    }) = read().unwrap()
-                    {
-                        if self.monitor.get_status_text() == MonitorStatus::Stopped {
-                            self.start_monitor();
-                        }
-                    }
+                    // if self.monitor.get_status_text() == MonitorStatus::Stopped {
+                    //     self.start_monitor();
+                    // }
+                }
+                KeyCode::Up => {
+                    self.menu_state.borrow_mut().select_up();
+                }
+                KeyCode::Down => {
+                    self.menu_state.borrow_mut().select_down();
+                }
+                KeyCode::Left => {
+                    self.menu_state.borrow_mut().select_left();
+                }
+                KeyCode::Right => {
+                    self.menu_state.borrow_mut().select_right();
                 }
                 _ => {}
             }

@@ -53,7 +53,7 @@ impl StatefulWidgetRef for MenuItem {
         state: &mut Self::State,
     ) {
         let chunks = Layout::default()
-            .direction(Direction::Vertical)
+            .direction(Direction::Horizontal)
             .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
 
@@ -61,6 +61,11 @@ impl StatefulWidgetRef for MenuItem {
         if state.selected_indices.len() > 0 {
             // 判断选中的菜单项是否为第一级菜单
             if state.selected_indices.len() == 1 {
+                // 若超出边界，则将选中的菜单项设置为最后一级菜单
+                if state.selected_indices[0] > self.children.len() - 1 {
+                    state.selected_indices[0] = self.children.len() - 1;
+                }
+
                 let index = state.selected_indices[0];
 
                 self.render_left(&self.children, chunks[0], buf, Some(index));
@@ -75,7 +80,13 @@ impl StatefulWidgetRef for MenuItem {
                 }
             } else if state.selected_indices.len() > 1 {
                 let mut last_item = &Rc::new(RefCell::new(MenuItem::default()));
-                for i in 0..state.selected_indices.len() - 1 {
+
+                // 遍历到选中的菜单项
+                for i in 0..=state.selected_indices.len() - 1 {
+                    //  判断选中的菜单项是否超出边界
+                    if state.selected_indices[i] > last_item.borrow().children.len() - 1 {
+                        state.selected_indices[i] = last_item.borrow().children.len() - 1;
+                    }
                     last_item = &self.children[state.selected_indices[i]];
                 }
 
