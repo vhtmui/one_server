@@ -134,6 +134,11 @@ impl FileMonitor {
                   "children": []
                 }
               ]
+            },
+            {
+              "name": "Other",
+              "content": "This is the other page.",
+              "children": []
             }
           ]
         }
