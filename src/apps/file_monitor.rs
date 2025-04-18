@@ -17,9 +17,11 @@ use ratatui::{
 
 use crate::{
     apps::AppAction::{self, *},
-    file_monitor::MonitorStatus::*,
-    menu::{MenuItem, MenuState},
-    my_widgets::MyWidgets,
+    apps::file_monitor::MonitorStatus::*,
+    my_widgets::{
+        MyWidgets,
+        menu::{MenuItem, MenuState},
+    },
 };
 
 pub struct FileMonitor {
@@ -84,34 +86,17 @@ impl FileMonitor {
         }
     }
 
-    pub fn get_layout_areas(area: Rect) -> (Rect, Rect, Rect) {
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(area);
-
-        let left_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(chunks[0]);
-
-        (left_chunks[0], left_chunks[1], chunks[1])
-    }
-
     pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
-        let chunks = Self::get_layout_areas(area).0;
-        self.render_block("Control Panel".to_string(), chunks, buf);
-        self.render_menu(chunks, buf);
+        self.render_block("Control Panel".to_string(), area, buf);
+        self.render_menu(area, buf);
     }
 
     pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {
-        let chunks = Self::get_layout_areas(area).1;
-        self.render_block("Status Area".to_string(), chunks, buf);
+        self.render_block("Status Area".to_string(), area, buf);
     }
 
     pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {
-        let chunks = Self::get_layout_areas(area).2;
-        self.render_block("Log Area".to_string(), chunks, buf);
+        self.render_block("Log Area".to_string(), area, buf);
     }
 
     pub fn start_monitor(&mut self) {
@@ -119,7 +104,7 @@ impl FileMonitor {
     }
 
     pub fn render_block(&self, title: String, area: Rect, buf: &mut Buffer) {
-        let block = Block::new().borders(Borders::ALL).title(title);
+        let block = Block::new().title(title);
         block.render(area, buf);
     }
 
@@ -154,18 +139,38 @@ impl FileMonitor {
         }
         "#;
 
+        let menu_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
+            .split(area)[1];
+
         let mut state = self.menu_state.borrow_mut();
+
         if let Ok(menu_item) = MenuItem::from_json(json_data) {
-            StatefulWidgetRef::render_ref(&*menu_item.borrow(), area, buf, &mut *state);
+            StatefulWidgetRef::render_ref(&*menu_item.borrow(), menu_area, buf, &mut *state);
         }
     }
 }
 
 impl WidgetRef for FileMonitor {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        self.render_control_panel(area, buf);
-        self.render_status_area(area, buf);
-        self.render_log_area(area, buf);
+        let (left_area, midline, right_area) = dichotomize_area_with_midlines(
+            area,
+            Direction::Horizontal,
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+        );
+
+        let (left_up_area, left_midline, left_down_area) = dichotomize_area_with_midlines(
+            left_area,
+            Direction::Vertical,
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+        );
+
+        self.render_control_panel(left_up_area, buf);
+        self.render_status_area(left_down_area, buf);
+        self.render_log_area(right_area, buf);
     }
 }
 
@@ -282,4 +287,18 @@ impl SharedState {
         }
         self.events.push_back(event);
     }
+}
+
+pub fn dichotomize_area_with_midlines(
+    area: Rect,
+    direction: Direction,
+    left_constraint: Constraint,
+    right_constraint: Constraint,
+) -> (Rect, Rect, Rect) {
+    let chunks = Layout::default()
+        .direction(direction)
+        .constraints([left_constraint, Constraint::Length(1), right_constraint].as_ref())
+        .split(area);
+
+    (chunks[0], chunks[1], chunks[2])
 }

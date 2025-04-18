@@ -2,6 +2,8 @@ use ratatui::{crossterm::event::Event, layout::Rect, widgets::WidgetRef};
 
 use crate::apps::AppAction;
 
+pub mod menu;
+
 pub trait MyWidgets: WidgetRef {
     fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error>;
 }

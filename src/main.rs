@@ -1,7 +1,10 @@
 use macro_rules_attribute::apply;
 use smol_macros::main;
 
-use one_server::{add_widgets, apps::Apps, file_monitor::FileMonitor};
+use one_server::{
+    add_widgets,
+    apps::{Apps, file_monitor::FileMonitor},
+};
 
 #[apply(main!)]
 async fn main() {
