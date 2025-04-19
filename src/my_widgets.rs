@@ -1,4 +1,8 @@
-use ratatui::{crossterm::event::Event, layout::Rect, widgets::WidgetRef};
+use ratatui::{
+    crossterm::event::Event,
+    layout::{Constraint, Direction, Layout, Rect},
+    widgets::WidgetRef,
+};
 
 use crate::apps::AppAction;
 
@@ -23,4 +27,18 @@ pub fn get_center_rect(area: Rect, width_percentage: f32, height_percentage: f32
     } else {
         area
     }
+}
+
+pub fn dichotomize_area_with_midlines(
+    area: Rect,
+    direction: Direction,
+    left_constraint: Constraint,
+    right_constraint: Constraint,
+) -> (Rect, Rect, Rect) {
+    let chunks = Layout::default()
+        .direction(direction)
+        .constraints([left_constraint, Constraint::Length(1), right_constraint].as_ref())
+        .split(area);
+
+    (chunks[0], chunks[1], chunks[2])
 }

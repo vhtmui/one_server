@@ -1,7 +1,7 @@
 pub use self::menu_state::MenuState;
 
-pub mod menu_state;
 mod menu_render;
+pub mod menu_state;
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -13,10 +13,9 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 
-
 // 定义一个辅助结构体，用于序列化和反序列化 MenuItem
 #[derive(Serialize, Deserialize, Debug)]
-struct SerializableMenuItem {
+pub struct SerializableMenuItem {
     pub name: String,
     pub content: String,
     pub children: Vec<SerializableMenuItem>,
@@ -93,7 +92,6 @@ impl MenuItem {
                 .collect(),
         }
     }
-
 }
 
 impl PartialEq for MenuItem {

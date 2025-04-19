@@ -21,7 +21,7 @@ use crate::{
 
 pub mod file_monitor;
 
-pub const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+pub const MENU_SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
 pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
 
 #[derive(PartialEq, Eq)]
@@ -88,7 +88,7 @@ impl Apps {
         let menu_list = List::new(apps.iter().map(AsRef::as_ref).collect::<Vec<&str>>())
             .block(block)
             .highlight_spacing(HighlightSpacing::WhenSelected)
-            .highlight_style(SELECTED_STYLE)
+            .highlight_style(MENU_SELECTED_STYLE)
             .highlight_symbol(">");
 
         StatefulWidget::render(menu_list, area, buf, &mut self.menu.state);

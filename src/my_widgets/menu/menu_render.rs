@@ -3,14 +3,18 @@ use std::{cell::RefCell, rc::Rc};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
     widgets::{
         Block, Borders, List, ListState, StatefulWidget, StatefulWidgetRef, Widget, WidgetRef,
     },
 };
 
 use crate::{
-    apps::{SELECTED_STYLE, file_monitor::dichotomize_area_with_midlines},
-    my_widgets::menu::{MenuItem, MenuState},
+    apps::MENU_SELECTED_STYLE,
+    my_widgets::{
+        dichotomize_area_with_midlines,
+        menu::{MenuItem, MenuState},
+    },
 };
 
 impl MenuItem {
@@ -27,7 +31,7 @@ impl MenuItem {
         state.select(index);
         StatefulWidget::render(
             List::new(items.iter().map(|item| item.borrow().name.clone()))
-                .highlight_style(SELECTED_STYLE),
+                .highlight_style(MENU_SELECTED_STYLE),
             area,
             buf,
             &mut state,
@@ -74,7 +78,10 @@ impl StatefulWidgetRef for MenuItem {
             Constraint::Percentage(50),
         );
 
-        Block::default().borders(Borders::LEFT).render(midline, buf);
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(Style::new().add_modifier(Modifier::DIM))
+            .render(midline, buf);
 
         // 判断是否有选中的菜单项
         match state.selected_indices.len() {
