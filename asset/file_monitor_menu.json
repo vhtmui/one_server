@@ -1,0 +1,22 @@
+{
+    "name": "Monitor Menu",
+    "content": "This is a menu of file monitor.",
+    "children": [
+        {
+            "name": "monitor",
+            "content": "This is a description.",
+            "children": [
+                {
+                    "name": "start",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+                },
+                {
+                    "name": "stop",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+                }
+            ]
+        }
+    ]
+}

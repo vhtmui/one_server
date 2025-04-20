@@ -3,6 +3,7 @@ mod monitor;
 pub use monitor::*;
 
 use std::cell::RefCell;
+use std::thread::sleep;
 
 use ratatui::layout::Alignment;
 use ratatui::{
@@ -24,6 +25,30 @@ use crate::{
 const TITLE_STYLE: Style = Style::new()
     .add_modifier(Modifier::REVERSED)
     .add_modifier(Modifier::BOLD);
+const MENU_JSON: &str = r#"
+{
+    "name": "Monitor Menu",
+    "content": "This is a menu of file monitor.",
+    "children": [
+        {
+            "name": "monitor",
+            "content": "This is a description.",
+            "children": [
+                {
+                    "name": "start",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+                },
+                {
+                    "name": "stop",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+                }
+            ]
+        }
+    ]
+}
+"#;
 
 pub struct FileMonitor {
     title: String,
@@ -34,7 +59,7 @@ pub struct FileMonitor {
 
 impl FileMonitor {
     pub fn new(title: String, path: String) -> Self {
-        let menu_struct = serde_json::from_str(Self::get_menu_json()).unwrap();
+        let menu_struct = serde_json::from_str(MENU_JSON).unwrap();
         FileMonitor {
             menu_state: RefCell::new(MenuState::default()),
             title: title,
@@ -43,7 +68,7 @@ impl FileMonitor {
         }
     }
 
-    pub fn get_menu_result(&self) -> Vec<String> {
+    pub fn get_menu_result(&self) -> String {
         let indices = self.menu_state.borrow().selected_indices.clone();
         let mut current = &self.menu_struct;
         let mut result = vec![current.name.clone()];
@@ -60,44 +85,7 @@ impl FileMonitor {
             result.push(current.name.clone());
         }
 
-        result
-    }
-
-    fn get_menu_json() -> &'static str {
-        r#"
-        {
-          "name": "Main Menu",
-          "content": "This is the main menu.",
-          "children": [
-            {
-              "name": "Home",
-              "content": "This is the home page.",
-              "children": []
-            },
-            {
-              "name": "Settings",
-              "content": "This is the settings page.",
-              "children": [
-                {
-                  "name": "Audio",
-                  "content": "This is the audio settings page.",
-                  "children": []
-                },
-                {
-                  "name": "Video",
-                  "content": "This is the video settings page.",
-                  "children": []
-                }
-              ]
-            },
-            {
-              "name": "Other",
-              "content": "This is the other page.",
-              "children": []
-            }
-          ]
-        }
-        "#
+        result.join("-")
     }
 
     pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
@@ -126,7 +114,7 @@ impl FileMonitor {
     }
 
     pub fn render_menu(&self, area: Rect, buf: &mut Buffer) {
-        let json_data = Self::get_menu_json();
+        let json_data = MENU_JSON;
         let menu_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
@@ -180,9 +168,15 @@ impl MyWidgets for FileMonitor {
                     return Ok(ToggleMenu);
                 }
                 KeyCode::Enter => {
-                    // if self.monitor.get_status_text() == MonitorStatus::Stopped {
-                    //     self.start_monitor();
-                    // }
+                    if !self.menu_state.borrow().selected_indices.is_empty() {
+                        match self.get_menu_result().as_str() {
+                            "monitor-start" => {
+                                self.start_monitor();
+                            }
+                            _ => {
+                            }
+                        };
+                    }
                 }
                 KeyCode::Up => {
                     self.menu_state.borrow_mut().select_up();

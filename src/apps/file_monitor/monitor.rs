@@ -92,6 +92,12 @@ impl Monitor {
         Ok(())
     }
 
+    pub fn stop_monitor(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.join().expect("Failed to join file monitoring thread");
+        }
+    }
+
     fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: &str) -> NotifyResult<()> {
         let (tx, rx) = mpsc::channel::<NotifyResult<NotifyEvent>>();
 
