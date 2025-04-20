@@ -1,11 +1,14 @@
 mod monitor;
 
+use chrono::Utc;
 pub use monitor::*;
 
 use std::cell::RefCell;
 use std::thread::sleep;
 
 use ratatui::layout::Alignment;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{List, ListItem, ListState};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, read},
@@ -15,7 +18,10 @@ use ratatui::{
 };
 
 use crate::{
-    apps::AppAction::{self, *},
+    apps::{
+        AppAction::{self, *},
+        file_monitor::monitor::MonitorStatus::*,
+    },
     my_widgets::{
         MyWidgets, dichotomize_area_with_midlines,
         menu::{MenuItem, MenuState, SerializableMenuItem},
@@ -99,10 +105,7 @@ impl FileMonitor {
 
     pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {
         self.render_block("Log Area".to_string(), area, buf);
-    }
-
-    pub fn start_monitor(&mut self) {
-        self.monitor.start_monitor().unwrap();
+        self.render_logs(area, buf);
     }
 
     pub fn render_block(&self, title: String, area: Rect, buf: &mut Buffer) {
@@ -125,6 +128,44 @@ impl FileMonitor {
         if let Ok(menu_item) = MenuItem::from_json(json_data) {
             StatefulWidgetRef::render_ref(&*menu_item.borrow(), menu_area, buf, &mut *state);
         }
+    }
+
+    pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
+        let events = &self.monitor.shared_state.lock().unwrap().events;
+
+        // 转换事件为List项（逆序排列，最新事件在底部）
+        let items: Vec<ListItem> = events
+            .iter()
+            .rev() // 根据实际需求决定是否反转
+            .map(|e| {
+                // 事件类型样式映射
+                let (prefix, color) = match e.event_type {
+                    MonitorEventType::Error => ("[ERR]  ", Color::Red),
+                    MonitorEventType::CreatedFile => ("[CREATE]", Color::Green),
+                    MonitorEventType::ModifiedFile => ("[MODIFY]", Color::Blue),
+                    MonitorEventType::DeletedFile => ("[DELETE]", Color::Magenta),
+                };
+
+                // 时间格式化
+                let time_str = e
+                    .time
+                    .map(|t| t.format("%H:%M:%S").to_string())
+                    .unwrap_or_else(|| "--:--:--".into());
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(prefix, Style::new().fg(color)),
+                    Span::raw(" "),
+                    Span::styled(time_str, Style::new().fg(Color::Gray)),
+                    Span::raw(" "),
+                    Span::raw(&e.message),
+                ]))
+            })
+            .collect();
+
+        // 构建列表组件
+        List::new(items)
+            .block(Block::default().borders(Borders::NONE))
+            .render(area, buf);
     }
 }
 
@@ -171,10 +212,16 @@ impl MyWidgets for FileMonitor {
                     if !self.menu_state.borrow().selected_indices.is_empty() {
                         match self.get_menu_result().as_str() {
                             "monitor-start" => {
-                                self.start_monitor();
+                                if self.monitor.get_status() != Running {
+                                    self.monitor.start_monitor();
+                                }
                             }
-                            _ => {
+                            "monitor-stop" => {
+                                if self.monitor.get_status() != Stopped {
+                                    self.monitor.stop_monitor();
+                                }
                             }
+                            _ => {}
                         };
                     }
                 }
