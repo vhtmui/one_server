@@ -127,6 +127,8 @@ impl Monitor {
     pub fn stop_monitor(&mut self) {
         self.shared_state.lock().unwrap().should_stop = true;
 
+        thread::sleep(Duration::from_millis(800));
+
         if let Some(handle) = self.handle.take() {
             match handle.is_finished() {
                 true => {
@@ -153,10 +155,13 @@ impl Monitor {
         watcher.watch(Path::new(path), RecursiveMode::NonRecursive)?;
 
         loop {
-            if shared_state.lock().unwrap().should_stop {
-                shared_state.lock().unwrap().status = Stopped;
+            let mut ss = shared_state.lock().unwrap();
+            if ss.should_stop {
+                ss.status = Stopped;
+                ss.should_stop = false;
                 break;
             }
+            drop(ss);
 
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(event) => {
