@@ -12,7 +12,7 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path = r#"..\asset\f_monitor_test"#.to_string();
+    let path = r#"asset\f_monitor_test"#.to_string();
     let file_monitor = (
         String::from("file_monitor"),
         Box::new(FileMonitor::new("file_monitor".to_string(), path)),

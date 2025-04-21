@@ -148,6 +148,8 @@ impl FileMonitor {
                     MonitorEventType::CreatedFile => ("[CREATE]", Color::Green),
                     MonitorEventType::ModifiedFile => ("[MODIFY]", Color::Blue),
                     MonitorEventType::DeletedFile => ("[DELETE]", Color::Magenta),
+                    MonitorEventType::StopMonitor => ("[STOP]", Color::Yellow),
+                    MonitorEventType::Info => ("[INFO]  ", Color::White),
                 };
 
                 // 时间格式化

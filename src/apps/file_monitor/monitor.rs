@@ -23,6 +23,7 @@ pub struct SharedState {
     pub status: MonitorStatus,
     pub file_analyzer: FileAnalyzer,
     pub events: VecDeque<MonitorEvent>,
+    pub should_stop: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -53,10 +54,12 @@ pub struct MonitorEvent {
 }
 
 pub enum MonitorEventType {
+    StopMonitor,
     Error,
     CreatedFile,
     ModifiedFile,
     DeletedFile,
+    Info,
 }
 
 impl Monitor {
@@ -67,6 +70,7 @@ impl Monitor {
             status: Stopped,
             file_analyzer: FileAnalyzer::default(),
             events: VecDeque::with_capacity(10),
+            should_stop: false,
         }));
 
         Monitor {
@@ -88,10 +92,15 @@ impl Monitor {
 
         let path = self.path.clone();
         if !Path::new(&path).exists() {
+            let current_path = std::env::current_dir()?;
+
             self.shared_state.lock().unwrap().add_event(MonitorEvent {
                 time: Some(Utc::now().with_timezone(TIME_ZONE)),
                 event_type: MonitorEventType::Error,
-                message: "Path does not exist".to_string(),
+                message: format!(
+                    "Path does not exist, current path: {}",
+                    current_path.display()
+                ),
             });
             return Ok(());
         }
@@ -116,11 +125,23 @@ impl Monitor {
     }
 
     pub fn stop_monitor(&mut self) {
+        self.shared_state.lock().unwrap().should_stop = true;
+
         if let Some(handle) = self.handle.take() {
-            handle
-                .join()
-                .expect("Failed to join file monitoring thread")
-                .unwrap();
+            match handle.is_finished() {
+                true => {
+                    self.add_event(MonitorEvent {
+                        time: Some(Utc::now().with_timezone(TIME_ZONE)),
+                        event_type: MonitorEventType::StopMonitor,
+                        message: "Monitor stopped.".to_string(),
+                    });
+                }
+                false => self.add_event(MonitorEvent {
+                    time: Some(Utc::now().with_timezone(TIME_ZONE)),
+                    event_type: MonitorEventType::Error,
+                    message: "Monitor does not stopped!".to_string(),
+                }),
+            }
         }
     }
 
@@ -132,13 +153,26 @@ impl Monitor {
         watcher.watch(Path::new(path), RecursiveMode::NonRecursive)?;
 
         loop {
-            match rx.recv() {
+            if shared_state.lock().unwrap().should_stop {
+                shared_state.lock().unwrap().status = Stopped;
+                break;
+            }
+
+            match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(event) => {
                     shared_state.lock().unwrap().add_event(MonitorEvent {
                         time: Some(Utc::now().with_timezone(TIME_ZONE)),
                         event_type: MonitorEventType::ModifiedFile,
                         message: format!("File modified: {:?}", event),
                     });
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    shared_state.lock().unwrap().add_event(MonitorEvent {
+                        time: Some(Utc::now().with_timezone(TIME_ZONE)),
+                        event_type: MonitorEventType::Info,
+                        message: "No events received".to_string(),
+                    });
+                    continue;
                 }
                 Err(e) => {
                     shared_state.lock().unwrap().add_event(MonitorEvent {
@@ -150,6 +184,7 @@ impl Monitor {
                 }
             }
         }
+        drop(watcher);
         Ok(())
     }
 
