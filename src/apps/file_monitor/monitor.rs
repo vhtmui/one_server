@@ -86,13 +86,22 @@ impl Monitor {
             return Ok(());
         }
 
+        let path = self.path.clone();
+        if !Path::new(&path).exists() {
+            self.shared_state.lock().unwrap().add_event(MonitorEvent {
+                time: Some(Utc::now().with_timezone(TIME_ZONE)),
+                event_type: MonitorEventType::Error,
+                message: "Path does not exist".to_string(),
+            });
+            return Ok(());
+        }
+
         {
             let mut locked_state = self.shared_state.lock().unwrap();
             locked_state.lunch_time = Some(Utc::now().with_timezone(TIME_ZONE));
             locked_state.status = Running;
         }
 
-        let path = self.path.clone();
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, &path));
 

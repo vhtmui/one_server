@@ -77,7 +77,7 @@ impl FileMonitor {
     pub fn get_menu_result(&self) -> String {
         let indices = self.menu_state.borrow().selected_indices.clone();
         let mut current = &self.menu_struct;
-        let mut result = vec![current.name.clone()];
+        let mut result = Vec::new();
 
         for index in indices {
             if index >= current.children.len() {
@@ -95,8 +95,13 @@ impl FileMonitor {
     }
 
     pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
+        let menu_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
+            .split(area)[1];
+
         self.render_block("Control Panel".to_string(), area, buf);
-        self.render_menu(area, buf);
+        self.render_menu(menu_area, buf);
     }
 
     pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {
@@ -104,8 +109,13 @@ impl FileMonitor {
     }
 
     pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {
+        let log_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
+            .split(area)[1];
+
         self.render_block("Log Area".to_string(), area, buf);
-        self.render_logs(area, buf);
+        self.render_logs(log_area, buf);
     }
 
     pub fn render_block(&self, title: String, area: Rect, buf: &mut Buffer) {
@@ -117,16 +127,10 @@ impl FileMonitor {
     }
 
     pub fn render_menu(&self, area: Rect, buf: &mut Buffer) {
-        let json_data = MENU_JSON;
-        let menu_area = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
-            .split(area)[1];
-
         let mut state = self.menu_state.borrow_mut();
 
-        if let Ok(menu_item) = MenuItem::from_json(json_data) {
-            StatefulWidgetRef::render_ref(&*menu_item.borrow(), menu_area, buf, &mut *state);
+        if let Ok(menu_item) = MenuItem::from_json(MENU_JSON) {
+            StatefulWidgetRef::render_ref(&*menu_item.borrow(), area, buf, &mut *state);
         }
     }
 
