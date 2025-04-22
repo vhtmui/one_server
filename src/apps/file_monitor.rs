@@ -7,8 +7,8 @@ use std::cell::RefCell;
 use std::thread::sleep;
 
 use ratatui::layout::Alignment;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, ListState};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, read},
@@ -16,6 +16,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, StatefulWidgetRef, Widget, WidgetRef},
 };
+use textwrap;
 
 use crate::{
     apps::{
@@ -156,15 +157,12 @@ impl FileMonitor {
                 let time_str = e
                     .time
                     .map(|t| t.format("%H:%M:%S").to_string())
-                    .unwrap_or_else(|| "--:--:--".into());
+                    .unwrap_or_else(|| "--:--:--".into()).as_str();
 
-                ListItem::new(Line::from(vec![
-                    Span::styled(prefix, Style::new().fg(color)),
-                    Span::raw(" "),
-                    Span::styled(time_str, Style::new().fg(Color::Gray)),
-                    Span::raw(" "),
-                    Span::raw(&e.message),
-                ]))
+                let text = vec![prefix, " ", time_str, " ", &e.message];
+
+                let item = ListItem::new(Text::from(Line::from(text)));
+                item
             })
             .collect();
 

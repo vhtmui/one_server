@@ -93,6 +93,7 @@ impl StatefulWidgetRef for MenuItem {
                 // 若超出边界，则将选中的菜单项设置为最后一个
                 let selected_index =
                     state.selected_indices[0].min(self.children.len().saturating_sub(1));
+                state.selected_indices[0] = selected_index;
                 self.render_to_left(&self.children, left_area, buf, Some(selected_index));
 
                 if self.children[selected_index].borrow().children.len() > 0 {
