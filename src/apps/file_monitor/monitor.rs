@@ -69,7 +69,7 @@ impl Monitor {
             elapsed_time: Duration::from_secs(0),
             status: Stopped,
             file_analyzer: FileAnalyzer::default(),
-            events: VecDeque::with_capacity(10),
+            events: VecDeque::with_capacity(50),
             should_stop: false,
         }));
 
@@ -212,7 +212,7 @@ impl Monitor {
 
 impl SharedState {
     fn add_event(&mut self, event: MonitorEvent) {
-        if self.events.len() == 10 {
+        if self.events.len() == self.events.capacity() {
             self.events.pop_front();
         }
         self.events.push_back(event);
