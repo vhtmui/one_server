@@ -1,10 +1,10 @@
 mod monitor;
 
-use chrono::Utc;
 pub use monitor::*;
 
+use hyphenation::{Language, Load, Standard};
 use std::cell::RefCell;
-use std::thread::sleep;
+use textwrap::{Options, WordSplitter, fill};
 
 use ratatui::layout::Alignment;
 use ratatui::text::{Line, Span, Text};
@@ -29,9 +29,7 @@ use crate::{
     },
 };
 
-const TITLE_STYLE: Style = Style::new()
-    .add_modifier(Modifier::REVERSED)
-    .add_modifier(Modifier::BOLD);
+const TITLE_STYLE: Style = Style::new().fg(Color::Green).add_modifier(Modifier::BOLD);
 const MENU_JSON: &str = r#"
 {
     "name": "Monitor Menu",
@@ -138,12 +136,10 @@ impl FileMonitor {
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
         let events = &self.monitor.shared_state.lock().unwrap().events;
 
-        // 转换事件为List项（逆序排列，最新事件在底部）
         let items: Vec<ListItem> = events
             .iter()
-            .rev() // 根据实际需求决定是否反转
+            .rev()
             .map(|e| {
-                // 事件类型样式映射
                 let (prefix, color) = match e.event_type {
                     MonitorEventType::Error => ("[ERR]  ", Color::Red),
                     MonitorEventType::CreatedFile => ("[CREATE]", Color::Green),
@@ -153,20 +149,27 @@ impl FileMonitor {
                     MonitorEventType::Info => ("[INFO]  ", Color::White),
                 };
 
-                // 时间格式化
                 let time_str = e
                     .time
                     .map(|t| t.format("%H:%M:%S").to_string())
-                    .unwrap_or_else(|| "--:--:--".into()).as_str();
+                    .unwrap_or_else(|| "--:--:--".into());
 
-                let text = vec![prefix, " ", time_str, " ", &e.message];
+                let text = vec![prefix, " ", time_str.as_str(), " ", &e.message].join("");
 
-                let item = ListItem::new(Text::from(Line::from(text)));
+                let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
+                let options = textwrap::Options::new(area.width as usize)
+                    .word_splitter(WordSplitter::Hyphenation(dictionary));
+
+                let lines: Vec<Line> = textwrap::wrap(text.as_str(), &options)
+                    .iter()
+                    .map(|line| Line::from(line.to_string()))
+                    .collect();
+
+                let item = ListItem::new(Text::from(lines));
                 item
             })
             .collect();
 
-        // 构建列表组件
         List::new(items)
             .block(Block::default().borders(Borders::NONE))
             .render(area, buf);
@@ -178,15 +181,15 @@ impl WidgetRef for FileMonitor {
         let (left_area, midline, right_area) = dichotomize_area_with_midlines(
             area,
             Direction::Horizontal,
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
+            Constraint::Percentage(30),
+            Constraint::Percentage(70),
         );
 
         let (left_up_area, left_midline, left_down_area) = dichotomize_area_with_midlines(
             left_area,
             Direction::Vertical,
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
+            Constraint::Percentage(30),
+            Constraint::Percentage(70),
         );
 
         Block::default().borders(Borders::LEFT).render(midline, buf);

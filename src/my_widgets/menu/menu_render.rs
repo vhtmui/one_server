@@ -1,21 +1,24 @@
 use std::{cell::RefCell, rc::Rc};
 
+use crossterm::style;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color::*, Modifier, Style, palette::material::YELLOW},
     widgets::{
         Block, Borders, List, ListState, StatefulWidget, StatefulWidgetRef, Widget, WidgetRef,
     },
 };
 
-use crate::{
-    apps::MENU_SELECTED_STYLE,
-    my_widgets::{
-        dichotomize_area_with_midlines,
-        menu::{MenuItem, MenuState},
-    },
+use crate::my_widgets::{
+    dichotomize_area_with_midlines,
+    menu::{MenuItem, MenuState},
 };
+
+pub const MENU_HIGHLIGHT: Style = Style::new()
+    .bg(Indexed(30))
+    .add_modifier(Modifier::BOLD);
+pub const MENU_SELECTED: Style = Style::new().fg(Red).bg(Indexed(43));
 
 impl MenuItem {
     fn render_list(
@@ -23,6 +26,7 @@ impl MenuItem {
         area: Rect,
         buf: &mut Buffer,
         index: Option<usize>,
+        style: Style,
     ) {
         if items.is_empty() {
             return;
@@ -30,8 +34,7 @@ impl MenuItem {
         let mut state = ListState::default();
         state.select(index);
         StatefulWidget::render(
-            List::new(items.iter().map(|item| item.borrow().name.clone()))
-                .highlight_style(MENU_SELECTED_STYLE),
+            List::new(items.iter().map(|item| item.borrow().name.clone())).highlight_style(style),
             area,
             buf,
             &mut state,
@@ -45,7 +48,7 @@ impl MenuItem {
         buf: &mut Buffer,
         index: Option<usize>,
     ) {
-        Self::render_list(children, area, buf, index);
+        Self::render_list(children, area, buf, index, MENU_HIGHLIGHT);
     }
 
     fn render_to_right(
@@ -55,7 +58,7 @@ impl MenuItem {
         buf: &mut Buffer,
         index: Option<usize>,
     ) {
-        Self::render_list(children, area, buf, index);
+        Self::render_list(children, area, buf, index, MENU_SELECTED);
     }
 }
 

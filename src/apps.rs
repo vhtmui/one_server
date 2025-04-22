@@ -22,6 +22,10 @@ use crate::{
 pub mod file_monitor;
 
 pub const MENU_SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+pub const MENU_HIGHLIGHT_STYLE: Style = Style::new()
+    .bg(SLATE.c800)
+    .fg(ratatui::style::Color::Green)
+    .add_modifier(Modifier::BOLD);
 pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
 
 #[derive(PartialEq, Eq)]
@@ -170,7 +174,7 @@ impl Apps {
         self.apps.iter().map(|x| x.0.clone()).collect()
     }
 
-    pub fn clear_area(area: Rect, buf: &mut Buffer){
+    pub fn clear_area(area: Rect, buf: &mut Buffer) {
         for x in area.left()..area.right() {
             for y in area.top()..area.bottom() {
                 buf[(x, y)].reset();
