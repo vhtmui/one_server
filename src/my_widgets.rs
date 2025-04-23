@@ -34,10 +34,18 @@ pub fn dichotomize_area_with_midlines(
     direction: Direction,
     left_constraint: Constraint,
     right_constraint: Constraint,
+    midline_width: u16,
 ) -> (Rect, Rect, Rect) {
     let chunks = Layout::default()
         .direction(direction)
-        .constraints([left_constraint, Constraint::Length(1), right_constraint].as_ref())
+        .constraints(
+            [
+                left_constraint,
+                Constraint::Length(midline_width),
+                right_constraint,
+            ]
+            .as_ref(),
+        )
         .split(area);
 
     (chunks[0], chunks[1], chunks[2])

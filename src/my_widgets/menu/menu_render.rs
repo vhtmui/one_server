@@ -1,13 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crossterm::style;
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color::*, Modifier, Style, palette::material::YELLOW},
-    widgets::{
+    buffer::Buffer, layout::{Constraint, Direction, Layout, Rect}, prelude::BlockExt, style::{palette::material::YELLOW, Color::*, Modifier, Style, Styled}, widgets::{
         Block, Borders, List, ListState, StatefulWidget, StatefulWidgetRef, Widget, WidgetRef,
-    },
+    }
 };
 
 use crate::my_widgets::{
@@ -15,14 +11,12 @@ use crate::my_widgets::{
     menu::{MenuItem, MenuState},
 };
 
-pub const MENU_HIGHLIGHT: Style = Style::new()
-    .bg(Indexed(30))
-    .add_modifier(Modifier::BOLD);
+pub const MENU_HIGHLIGHT: Style = Style::new().bg(Indexed(30)).add_modifier(Modifier::BOLD);
 pub const MENU_SELECTED: Style = Style::new().fg(Red).bg(Indexed(43));
 
-impl MenuItem {
+impl<'a> MenuItem<'a> {
     fn render_list(
-        items: &Vec<Rc<RefCell<MenuItem>>>,
+        items: &Vec<Rc<RefCell<MenuItem<'a>>>>,
         area: Rect,
         buf: &mut Buffer,
         index: Option<usize>,
@@ -43,7 +37,7 @@ impl MenuItem {
 
     fn render_to_left(
         &self,
-        children: &Vec<Rc<RefCell<MenuItem>>>,
+        children: &Vec<Rc<RefCell<MenuItem<'a>>>>,
         area: Rect,
         buf: &mut Buffer,
         index: Option<usize>,
@@ -53,7 +47,7 @@ impl MenuItem {
 
     fn render_to_right(
         &self,
-        children: &Vec<Rc<RefCell<MenuItem>>>,
+        children: &Vec<Rc<RefCell<MenuItem<'a>>>>,
         area: Rect,
         buf: &mut Buffer,
         index: Option<usize>,
@@ -62,11 +56,11 @@ impl MenuItem {
     }
 }
 
-impl WidgetRef for MenuItem {
+impl<'a> WidgetRef for MenuItem<'a> {
     fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {}
 }
 
-impl StatefulWidgetRef for MenuItem {
+impl<'a> StatefulWidgetRef for MenuItem<'a> {
     type State = MenuState;
     fn render_ref(
         &self,
@@ -74,16 +68,20 @@ impl StatefulWidgetRef for MenuItem {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
+        self.block.render_ref(area, buf);
+        let menu_area = self.block.inner_if_some(area);
+
         let (left_area, midline, right_area) = dichotomize_area_with_midlines(
-            area,
+            menu_area,
             Direction::Horizontal,
             Constraint::Percentage(50),
             Constraint::Percentage(50),
+            1,
         );
 
         Block::default()
             .borders(Borders::LEFT)
-            .border_style(Style::new().add_modifier(Modifier::DIM))
+            .border_style(Style::new().fg(Gray))
             .render(midline, buf);
 
         // 判断是否有选中的菜单项

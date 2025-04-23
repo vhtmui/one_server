@@ -9,7 +9,7 @@ use std::rc::{Rc, Weak};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    widgets::{List, ListState, StatefulWidget, StatefulWidgetRef, WidgetRef},
+    widgets::Block,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,20 +22,21 @@ pub struct SerializableMenuItem {
 }
 
 #[derive(Default, Debug)]
-pub struct MenuItem {
+pub struct MenuItem<'a> {
     name: String,
     content: String,
-    children: Vec<Rc<RefCell<MenuItem>>>,
+    children: Vec<Rc<RefCell<MenuItem<'a>>>>,
     selected: bool,
-    parent: Weak<RefCell<MenuItem>>,
+    parent: Weak<RefCell<MenuItem<'a>>>,
+    block: Option<Block<'a>>,
 }
 
-impl MenuItem {
+impl<'a> MenuItem<'a> {
     pub fn new(
         name: String,
         content: String,
-        children: Vec<Rc<RefCell<MenuItem>>>,
-        parent: Weak<RefCell<MenuItem>>,
+        children: Vec<Rc<RefCell<MenuItem<'a>>>>,
+        parent: Weak<RefCell<MenuItem<'a>>>,
     ) -> Self {
         MenuItem {
             name,
@@ -43,6 +44,7 @@ impl MenuItem {
             children,
             selected: false,
             parent,
+            block: None,
         }
     }
 
@@ -69,6 +71,7 @@ impl MenuItem {
             children: Vec::new(),
             selected: false,
             parent,
+            block: None,
         }));
 
         let mut children = Vec::new();
@@ -92,9 +95,12 @@ impl MenuItem {
                 .collect(),
         }
     }
+    pub fn set_block(&mut self, block: Block<'a>){
+        self.block = Some(block);
+    }
 }
 
-impl PartialEq for MenuItem {
+impl<'a> PartialEq for MenuItem<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.content == other.content
@@ -108,7 +114,7 @@ impl PartialEq for MenuItem {
     }
 }
 
-impl Eq for MenuItem {}
+impl<'a> Eq for MenuItem<'a> {}
 
 #[test]
 fn test_menu_builder() {

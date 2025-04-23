@@ -22,7 +22,7 @@ pub struct SharedState {
     pub elapsed_time: Duration,
     pub status: MonitorStatus,
     pub file_analyzer: FileAnalyzer,
-    pub events: VecDeque<MonitorEvent>,
+    pub logs: VecDeque<MonitorEvent>,
     pub should_stop: bool,
 }
 
@@ -63,13 +63,13 @@ pub enum MonitorEventType {
 }
 
 impl Monitor {
-    pub fn new(path: String) -> Self {
+    pub fn new(path: String, log_size: usize) -> Self {
         let shared_state = Arc::new(Mutex::new(SharedState {
             lunch_time: None,
             elapsed_time: Duration::from_secs(0),
             status: Stopped,
             file_analyzer: FileAnalyzer::default(),
-            events: VecDeque::with_capacity(50),
+            logs: VecDeque::with_capacity(log_size),
             should_stop: false,
         }));
 
@@ -165,18 +165,14 @@ impl Monitor {
 
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(event) => {
+                    let event = event.unwrap();
                     shared_state.lock().unwrap().add_event(MonitorEvent {
                         time: Some(Utc::now().with_timezone(TIME_ZONE)),
                         event_type: MonitorEventType::ModifiedFile,
-                        message: format!("File modified: {:?}", event),
+                        message: format!("Notify event: {:?}, {:?}", event.kind, event.paths),
                     });
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    shared_state.lock().unwrap().add_event(MonitorEvent {
-                        time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                        event_type: MonitorEventType::Info,
-                        message: "No events received".to_string(),
-                    });
                     continue;
                 }
                 Err(e) => {
@@ -195,10 +191,10 @@ impl Monitor {
 
     pub fn add_event(&mut self, event: MonitorEvent) {
         let mut locked_state = self.shared_state.lock().unwrap();
-        if locked_state.events.len() == 10 {
-            locked_state.events.pop_front();
+        if locked_state.logs.len() == 10 {
+            locked_state.logs.pop_front();
         }
-        locked_state.events.push_back(event);
+        locked_state.logs.push_back(event);
     }
 
     fn analyze_content(content: &str) -> String {
@@ -212,9 +208,9 @@ impl Monitor {
 
 impl SharedState {
     fn add_event(&mut self, event: MonitorEvent) {
-        if self.events.len() == self.events.capacity() {
-            self.events.pop_front();
+        if self.logs.len() == self.logs.capacity() {
+            self.logs.pop_front();
         }
-        self.events.push_back(event);
+        self.logs.push_back(event);
     }
 }

@@ -15,7 +15,7 @@ async fn main() {
     let path = r#"asset\f_monitor_test"#.to_string();
     let file_monitor = (
         String::from("file_monitor"),
-        Box::new(FileMonitor::new("file_monitor".to_string(), path)),
+        Box::new(FileMonitor::new("file_monitor".to_string(), path, 50)),
     );
 
     add_widgets!(app, file_monitor)

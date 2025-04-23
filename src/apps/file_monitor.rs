@@ -2,11 +2,10 @@ mod monitor;
 
 pub use monitor::*;
 
-use hyphenation::{Language, Load, Standard};
 use std::cell::RefCell;
 use std::vec;
-use textwrap::{Options, WordSplitter, fill};
 
+use hyphenation::{Language, Load, Standard};
 use ratatui::layout::Alignment;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{List, ListItem, ListState, Paragraph};
@@ -17,8 +16,9 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, StatefulWidgetRef, Widget, WidgetRef},
 };
-use textwrap;
+use textwrap::{Options, WordSplitter, fill};
 
+use crate::my_widgets::menu;
 use crate::{
     apps::{
         AppAction::{self, *},
@@ -29,6 +29,8 @@ use crate::{
         menu::{MenuItem, MenuState, SerializableMenuItem},
     },
 };
+
+use super::MENU_HIGHLIGHT_STYLE;
 
 const TITLE_STYLE: Style = Style::new().fg(Color::Green).add_modifier(Modifier::BOLD);
 const MENU_JSON: &str = r#"
@@ -59,18 +61,22 @@ const MENU_JSON: &str = r#"
 pub struct FileMonitor {
     title: String,
     menu_state: RefCell<MenuState>,
-    monitor: Monitor,
     menu_struct: SerializableMenuItem,
+    monitor: Monitor,
+    list_state: RefCell<ListState>,
+    current_area: bool,
 }
 
 impl FileMonitor {
-    pub fn new(title: String, path: String) -> Self {
+    pub fn new(title: String, path: String, log_size: usize) -> Self {
         let menu_struct = serde_json::from_str(MENU_JSON).unwrap();
         FileMonitor {
             menu_state: RefCell::new(MenuState::default()),
-            title: title,
-            monitor: Monitor::new(path),
+            title,
             menu_struct,
+            monitor: Monitor::new(path, log_size),
+            list_state: RefCell::new(ListState::default()),
+            current_area: true,
         }
     }
 
@@ -94,48 +100,57 @@ impl FileMonitor {
         result.join("-")
     }
 
-    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer) {
-        let menu_area = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
-            .split(area)[1];
+    pub fn toggle_area(&mut self) {
+        self.current_area = !self.current_area;
+    }
 
-        self.render_block("Control Panel".to_string(), area, buf);
-        self.render_menu(menu_area, buf);
+    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer, highlight: bool) {
+        let mut state = self.menu_state.borrow_mut();
+
+        if let Ok(menu_item) = MenuItem::from_json(MENU_JSON) {
+            let block = Block::default()
+                .borders(if highlight {
+                    Borders::ALL
+                } else {
+                    Borders::NONE
+                })
+                .title("Control Panel")
+                .title_style(TITLE_STYLE)
+                .title_alignment(Alignment::Center);
+
+            menu_item.borrow_mut().set_block(block);
+            StatefulWidgetRef::render_ref(&*menu_item.borrow(), area, buf, &mut *state);
+        }
     }
 
     pub fn render_status_area(&self, area: Rect, buf: &mut Buffer) {
-        self.render_block("Status Area".to_string(), area, buf);
-    }
-
-    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer) {
-        let log_area = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
-            .split(area)[1];
-
-        self.render_block("Log Area".to_string(), area, buf);
-        self.render_logs(log_area, buf);
-    }
-
-    pub fn render_block(&self, title: String, area: Rect, buf: &mut Buffer) {
-        let block = Block::new()
-            .title(title)
+        let block = Block::default()
+            .borders(Borders::NONE)
+            .title("Status Area")
             .title_style(TITLE_STYLE)
             .title_alignment(Alignment::Center);
         block.render(area, buf);
     }
 
-    pub fn render_menu(&self, area: Rect, buf: &mut Buffer) {
-        let mut state = self.menu_state.borrow_mut();
+    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer, highlight: bool) {
+        let block = Block::default()
+            .borders(if highlight {
+                Borders::ALL
+            } else {
+                Borders::NONE
+            })
+            .title("Log Area")
+            .title_style(TITLE_STYLE)
+            .title_alignment(Alignment::Center);
+        block.render_ref(area, buf);
 
-        if let Ok(menu_item) = MenuItem::from_json(MENU_JSON) {
-            StatefulWidgetRef::render_ref(&*menu_item.borrow(), area, buf, &mut *state);
-        }
+        let log_area = block.inner(area);
+
+        self.render_logs(log_area, buf);
     }
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
-        let events = &self.monitor.shared_state.lock().unwrap().events;
+        let events = &self.monitor.shared_state.lock().unwrap().logs;
 
         let items: Vec<ListItem> = events
             .iter()
@@ -186,9 +201,14 @@ impl FileMonitor {
             })
             .collect();
 
-        List::new(items)
-            .block(Block::default().borders(Borders::NONE))
-            .render(area, buf);
+        StatefulWidgetRef::render_ref(
+            &List::new(items)
+                .block(Block::default().borders(Borders::NONE))
+                .highlight_style(MENU_HIGHLIGHT_STYLE),
+            area,
+            buf,
+            &mut *self.list_state.borrow_mut(),
+        );
     }
 }
 
@@ -199,6 +219,7 @@ impl WidgetRef for FileMonitor {
             Direction::Horizontal,
             Constraint::Percentage(30),
             Constraint::Percentage(70),
+            0,
         );
 
         let (left_up_area, left_midline, left_down_area) = dichotomize_area_with_midlines(
@@ -206,16 +227,12 @@ impl WidgetRef for FileMonitor {
             Direction::Vertical,
             Constraint::Percentage(30),
             Constraint::Percentage(70),
+            0,
         );
 
-        Block::default().borders(Borders::LEFT).render(midline, buf);
-        Block::default()
-            .borders(Borders::TOP)
-            .render(left_midline, buf);
-
-        self.render_control_panel(left_up_area, buf);
+        self.render_control_panel(left_up_area, buf, self.current_area);
         self.render_status_area(left_down_area, buf);
-        self.render_log_area(right_area, buf);
+        self.render_log_area(right_area, buf, !self.current_area);
     }
 }
 
@@ -231,36 +248,56 @@ impl MyWidgets for FileMonitor {
                 KeyCode::Esc => {
                     return Ok(ToggleMenu);
                 }
-                KeyCode::Enter => {
-                    if !self.menu_state.borrow().selected_indices.is_empty() {
-                        match self.get_menu_result().as_str() {
-                            "monitor-start" => {
-                                if self.monitor.get_status() != Running {
-                                    self.monitor.start_monitor();
+                KeyCode::Tab => {
+                    self.toggle_area();
+                }
+                code => {
+                    // if in menu area
+                    if self.current_area {
+                        match code {
+                            KeyCode::Enter => {
+                                if !self.menu_state.borrow().selected_indices.is_empty() {
+                                    match self.get_menu_result().as_str() {
+                                        "monitor-start" => {
+                                            if self.monitor.get_status() != Running {
+                                                self.monitor.start_monitor().unwrap();
+                                            }
+                                        }
+                                        "monitor-stop" => {
+                                            if self.monitor.get_status() != Stopped {
+                                                self.monitor.stop_monitor();
+                                            }
+                                        }
+                                        _ => {}
+                                    };
                                 }
                             }
-                            "monitor-stop" => {
-                                if self.monitor.get_status() != Stopped {
-                                    self.monitor.stop_monitor();
-                                }
+                            KeyCode::Up => {
+                                self.menu_state.borrow_mut().select_up();
+                            }
+                            KeyCode::Down => {
+                                self.menu_state.borrow_mut().select_down();
+                            }
+                            KeyCode::Left => {
+                                self.menu_state.borrow_mut().select_left();
+                            }
+                            KeyCode::Right => {
+                                self.menu_state.borrow_mut().select_right();
                             }
                             _ => {}
-                        };
+                        }
+                    } else {
+                        match code {
+                            KeyCode::Up => {
+                                self.list_state.borrow_mut().scroll_up_by(4);
+                            }
+                            KeyCode::Down => {
+                                self.list_state.borrow_mut().scroll_down_by(4);
+                            }
+                            _ => {}
+                        }
                     }
                 }
-                KeyCode::Up => {
-                    self.menu_state.borrow_mut().select_up();
-                }
-                KeyCode::Down => {
-                    self.menu_state.borrow_mut().select_down();
-                }
-                KeyCode::Left => {
-                    self.menu_state.borrow_mut().select_left();
-                }
-                KeyCode::Right => {
-                    self.menu_state.borrow_mut().select_right();
-                }
-                _ => {}
             }
         }
 
