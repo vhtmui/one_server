@@ -7,6 +7,7 @@ use ratatui::{
 use crate::apps::AppAction;
 
 pub mod menu;
+pub mod wrap_list;
 
 pub trait MyWidgets: WidgetRef {
     fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error>;

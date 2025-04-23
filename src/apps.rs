@@ -67,7 +67,7 @@ impl Apps {
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
                 .unwrap();
 
-            if poll(Duration::from_millis(0))? {
+            if poll(Duration::from_millis(400))? {
                 let event = read()?;
 
                 if let Ok(ExitProgress) = self.handle_event(event) {
