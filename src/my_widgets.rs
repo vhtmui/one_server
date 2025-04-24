@@ -1,5 +1,5 @@
 use ratatui::{
-    crossterm::event::Event,
+    crossterm::event::KeyCode,
     layout::{Constraint, Direction, Layout, Rect},
     widgets::WidgetRef,
 };
@@ -10,7 +10,7 @@ pub mod menu;
 pub mod wrap_list;
 
 pub trait MyWidgets: WidgetRef {
-    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error>;
+    fn handle_event(&mut self, code: KeyCode) -> Result<AppAction, std::io::Error>;
 }
 
 pub fn get_center_rect(area: Rect, width_percentage: f32, height_percentage: f32) -> Rect {

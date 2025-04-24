@@ -82,7 +82,7 @@ impl Monitor {
 
     pub fn start_monitor(&mut self) -> Result<()> {
         if self.shared_state.lock().unwrap().status == Running {
-            self.add_event(MonitorEvent {
+            self.shared_state.lock().unwrap().add_event(MonitorEvent {
                 time: Some(Utc::now().with_timezone(TIME_ZONE)),
                 event_type: MonitorEventType::Error,
                 message: "Monitor is already running".to_string(),
@@ -116,7 +116,7 @@ impl Monitor {
 
         self.handle = Some(handle);
 
-        self.add_event(MonitorEvent {
+        self.shared_state.lock().unwrap().add_event(MonitorEvent {
             time: Some(Utc::now().with_timezone(TIME_ZONE)),
             event_type: MonitorEventType::CreatedFile,
             message: "Monitor started".to_string(),
@@ -132,13 +132,13 @@ impl Monitor {
         if let Some(handle) = self.handle.take() {
             match handle.is_finished() {
                 true => {
-                    self.add_event(MonitorEvent {
+                    self.shared_state.lock().unwrap().add_event(MonitorEvent {
                         time: Some(Utc::now().with_timezone(TIME_ZONE)),
                         event_type: MonitorEventType::StopMonitor,
                         message: "Monitor stopped.".to_string(),
                     });
                 }
-                false => self.add_event(MonitorEvent {
+                false => self.shared_state.lock().unwrap().add_event(MonitorEvent {
                     time: Some(Utc::now().with_timezone(TIME_ZONE)),
                     event_type: MonitorEventType::Error,
                     message: "Monitor does not stopped!".to_string(),
@@ -187,14 +187,6 @@ impl Monitor {
         }
         drop(watcher);
         Ok(())
-    }
-
-    pub fn add_event(&mut self, event: MonitorEvent) {
-        let mut locked_state = self.shared_state.lock().unwrap();
-        if locked_state.logs.len() == 10 {
-            locked_state.logs.pop_front();
-        }
-        locked_state.logs.push_back(event);
     }
 
     fn analyze_content(content: &str) -> String {

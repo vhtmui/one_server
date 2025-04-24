@@ -237,65 +237,58 @@ impl WidgetRef for FileMonitor {
 }
 
 impl MyWidgets for FileMonitor {
-    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
-        if let Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Release,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Esc => {
-                    return Ok(ToggleMenu);
-                }
-                KeyCode::Tab => {
-                    self.toggle_area();
-                }
-                code => {
-                    // if in menu area
-                    if self.current_area {
-                        match code {
-                            KeyCode::Enter => {
-                                if !self.menu_state.borrow().selected_indices.is_empty() {
-                                    match self.get_menu_result().as_str() {
-                                        "monitor-start" => {
-                                            if self.monitor.get_status() != Running {
-                                                self.monitor.start_monitor().unwrap();
-                                            }
+    fn handle_event(&mut self, code: KeyCode) -> Result<AppAction, std::io::Error> {
+        match code {
+            KeyCode::Esc => {
+                return Ok(ToggleMenu);
+            }
+            KeyCode::Tab => {
+                self.toggle_area();
+            }
+            code => {
+                // if in menu area
+                if self.current_area {
+                    match code {
+                        KeyCode::Enter => {
+                            if !self.menu_state.borrow().selected_indices.is_empty() {
+                                match self.get_menu_result().as_str() {
+                                    "monitor-start" => {
+                                        if self.monitor.get_status() != Running {
+                                            self.monitor.start_monitor().unwrap();
                                         }
-                                        "monitor-stop" => {
-                                            if self.monitor.get_status() != Stopped {
-                                                self.monitor.stop_monitor();
-                                            }
+                                    }
+                                    "monitor-stop" => {
+                                        if self.monitor.get_status() != Stopped {
+                                            self.monitor.stop_monitor();
                                         }
-                                        _ => {}
-                                    };
-                                }
+                                    }
+                                    _ => {}
+                                };
                             }
-                            KeyCode::Up => {
-                                self.menu_state.borrow_mut().select_up();
-                            }
-                            KeyCode::Down => {
-                                self.menu_state.borrow_mut().select_down();
-                            }
-                            KeyCode::Left => {
-                                self.menu_state.borrow_mut().select_left();
-                            }
-                            KeyCode::Right => {
-                                self.menu_state.borrow_mut().select_right();
-                            }
-                            _ => {}
                         }
-                    } else {
-                        match code {
-                            KeyCode::Up => {
-                                self.list_state.borrow_mut().scroll_up_by(4);
-                            }
-                            KeyCode::Down => {
-                                self.list_state.borrow_mut().scroll_down_by(4);
-                            }
-                            _ => {}
+                        KeyCode::Up => {
+                            self.menu_state.borrow_mut().select_up();
                         }
+                        KeyCode::Down => {
+                            self.menu_state.borrow_mut().select_down();
+                        }
+                        KeyCode::Left => {
+                            self.menu_state.borrow_mut().select_left();
+                        }
+                        KeyCode::Right => {
+                            self.menu_state.borrow_mut().select_right();
+                        }
+                        _ => {}
+                    }
+                } else {
+                    match code {
+                        KeyCode::Up => {
+                            self.list_state.borrow_mut().scroll_up_by(1);
+                        }
+                        KeyCode::Down => {
+                            self.list_state.borrow_mut().scroll_down_by(1);
+                        }
+                        _ => {}
                     }
                 }
             }

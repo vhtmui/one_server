@@ -1,4 +1,5 @@
 use std::io::Stdout;
+use std::time::Instant;
 use std::{ops::Deref, time::Duration};
 
 use chrono::Local;
@@ -27,6 +28,7 @@ pub const MENU_HIGHLIGHT_STYLE: Style = Style::new()
     .fg(ratatui::style::Color::Green)
     .add_modifier(Modifier::BOLD);
 pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
+const THROTTLE_DURATION: Duration = Duration::from_millis(100);
 
 #[derive(PartialEq, Eq)]
 pub enum AppAction {
@@ -44,6 +46,7 @@ pub struct Apps {
     apps: Vec<(String, Box<dyn MyWidgets>)>,
     current_app: usize,
     menu: AppsMenu,
+    last_event_time: Instant,
 }
 
 impl Apps {
@@ -54,6 +57,7 @@ impl Apps {
             apps: Vec::new(),
             current_app: 0,
             menu: AppsMenu { show: false, state },
+            last_event_time: Instant::now(),
         }
     }
 
@@ -67,11 +71,17 @@ impl Apps {
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
                 .unwrap();
 
-            if poll(Duration::from_millis(400))? {
-                let event = read()?;
+            if poll(Duration::from_millis(100))? {
+                let mut events = Vec::new();
 
-                if let Ok(ExitProgress) = self.handle_event(event) {
-                    break;
+                while poll(Duration::ZERO)? {
+                    events.push(read()?);
+                }
+
+                if let Some(event) = events.first() {
+                    if let Ok(ExitProgress) = self.handle_event(event.clone()) {
+                        break;
+                    }
                 }
             } else {
                 smol::future::yield_now().await;
@@ -99,56 +109,64 @@ impl Apps {
     }
 
     pub fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
-        let result = if self.menu.show {
-            self.handle_menu_event(event)
-        } else {
-            self.get_current_app().handle_event(event)
-        };
+        match event {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                ..
+            }) => {
+                // if self.last_event_time.elapsed() < THROTTLE_DURATION {
+                //     return Ok(Default);
+                // }
+                // self.last_event_time = Instant::now();
 
-        match result {
-            Ok(ExitProgress) => Ok(ExitProgress),
-            Ok(ToggleMenu) => {
-                self.toggle_menu();
-                Ok(Default)
+                let result = if self.menu.show {
+                    self.handle_menu_event(code)
+                } else {
+                    self.get_current_app().handle_event(code)
+                };
+
+                match result {
+                    Ok(ExitProgress) => Ok(ExitProgress),
+                    Ok(ToggleMenu) => {
+                        self.toggle_menu();
+                        Ok(Default)
+                    }
+                    Ok(Default) => Ok(Default),
+                    Err(e) => Err(e),
+                }
             }
-            Ok(Default) => Ok(Default),
-            Err(e) => Err(e),
+            _ => Ok(Default),
         }
     }
 
-    fn handle_menu_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
-        if let Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Release,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Esc => self.toggle_menu(),
-                KeyCode::Enter => {
-                    if let Some(index) = self.menu.state.selected() {
-                        self.current_app = index;
-                        self.toggle_menu();
-                    }
+    fn handle_menu_event(&mut self, code: KeyCode) -> Result<AppAction, std::io::Error> {
+        match code {
+            KeyCode::Esc => self.toggle_menu(),
+            KeyCode::Enter => {
+                if let Some(index) = self.menu.state.selected() {
+                    self.current_app = index;
+                    self.toggle_menu();
                 }
-                KeyCode::Char('q') => {
-                    if self.menu.show {
-                        return Ok(ExitProgress);
-                    }
-                }
-                KeyCode::Up => {
-                    if self.menu.show {
-                        self.menu.state.select_previous();
-                    }
-                }
-                KeyCode::Down => {
-                    if self.menu.show {
-                        self.menu.state.select_next();
-                    }
-                }
-                _ => {}
             }
+            KeyCode::Char('q') => {
+                if self.menu.show {
+                    return Ok(ExitProgress);
+                }
+            }
+            KeyCode::Up => {
+                if self.menu.show {
+                    self.menu.state.select_previous();
+                }
+            }
+            KeyCode::Down => {
+                if self.menu.show {
+                    self.menu.state.select_next();
+                }
+            }
+            _ => {}
         }
+
         Ok(Default)
     }
 
