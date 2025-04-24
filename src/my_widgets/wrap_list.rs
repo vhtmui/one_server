@@ -5,7 +5,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidgetRef},
+    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, StatefulWidgetRef},
 };
 use textwrap::WordSplitter;
 
@@ -17,7 +17,7 @@ use crate::apps::{
 pub struct WrapList<'a> {
     pub raw_list: VecDeque<MonitorEvent>,
     pub list: VecDeque<ListItem<'a>>,
-    pub wrap_len: usize,
+    pub wrap_len: Option<usize>,
 }
 
 impl WrapList<'_> {
@@ -25,18 +25,20 @@ impl WrapList<'_> {
         Self {
             raw_list: VecDeque::with_capacity(capacity),
             list: VecDeque::with_capacity(capacity),
-            wrap_len: 0,
+            wrap_len: None,
         }
     }
 
     pub fn add_item(&mut self, item: MonitorEvent) {
-        if self.list.len() == self.wrap_len {
+        if self.list.len() == self.wrap_len.unwrap_or_default() {
             self.raw_list.pop_front();
             self.raw_list.push_back(item);
         }
     }
 
-    pub fn update_list(&mut self, area: Rect) {
+
+
+    pub fn update_list(&mut self, width: usize) {
         let items: Vec<ListItem> = self
             .raw_list
             .iter()
@@ -59,7 +61,7 @@ impl WrapList<'_> {
                 let text = format!("{prefix} {time_str} {}", e.message);
 
                 let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
-                let options = textwrap::Options::new(area.width as usize)
+                let options = textwrap::Options::new(width)
                     .word_splitter(WordSplitter::Hyphenation(dictionary));
 
                 let wrapped_lines: Vec<String> = textwrap::wrap(&text, options)
@@ -86,17 +88,22 @@ impl WrapList<'_> {
                 ListItem::new(Text::from(lines))
             })
             .collect();
+
+        self.list = items.into();
     }
 }
 
-impl StatefulWidgetRef for WrapList<'_> {
+impl StatefulWidget for &mut WrapList<'_> {
     type State = ListState;
-    fn render_ref(
-        &self,
+    fn render(
+        self,
         area: ratatui::prelude::Rect,
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
+        if self.wrap_len == None {
+            self.wrap_len = Some(area.width as usize);
+        }
         let items = self.list.clone();
         StatefulWidgetRef::render_ref(
             &List::new(items)

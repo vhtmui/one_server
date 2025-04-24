@@ -66,7 +66,7 @@ impl Apps {
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<bool, std::io::Error> {
         // let data_time_now = Local::now();
-        loop {
+        'app:loop {
             terminal
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
                 .unwrap();
@@ -78,9 +78,13 @@ impl Apps {
                     events.push(read()?);
                 }
 
-                if let Some(event) = events.first() {
-                    if let Ok(ExitProgress) = self.handle_event(event.clone()) {
-                        break;
+                let mut events_iter = events.iter();
+
+                for _ in 1..=2 {
+                    if let Some(event) = events_iter.next() {
+                        if let Ok(ExitProgress) = self.handle_event(event.clone()) {
+                            break 'app;
+                        }
                     }
                 }
             } else {
