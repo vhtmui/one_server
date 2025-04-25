@@ -32,8 +32,8 @@ impl WrapList<'_> {
     pub fn add_raw_item(&mut self, item: MonitorEvent) {
         if self.list.len() == self.wrap_len.unwrap_or_default() {
             self.raw_list.pop_front();
-            self.raw_list.push_back(item);
         }
+        self.raw_list.push_back(item);
     }
 
     pub fn add_item(&mut self, e: MonitorEvent) {
@@ -52,6 +52,8 @@ impl WrapList<'_> {
             .unwrap_or_else(|| "--:--:--".into());
 
         let text = format!("{prefix} {time_str} {}", e.message);
+
+        let width = self.wrap_len.unwrap_or_default();
 
         let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
         let options =
@@ -78,10 +80,16 @@ impl WrapList<'_> {
             })
             .collect();
 
+        if self.raw_list.len() == self.wrap_len.unwrap_or_default() {
+            self.raw_list.pop_front();
+        }
+
         self.list.push_back(ListItem::new(Text::from(lines)));
     }
 
-    pub fn update_list(&mut self, width: usize) {
+    pub fn update_list(&mut self) {
+        let width = self.wrap_len.unwrap_or_default();
+
         let items: Vec<ListItem> = self
             .raw_list
             .iter()
