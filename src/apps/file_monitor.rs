@@ -8,7 +8,7 @@ use std::vec;
 use hyphenation::{Language, Load, Standard};
 use ratatui::layout::Alignment;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph, StatefulWidget};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, read},
@@ -150,61 +150,10 @@ impl FileMonitor {
     }
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
-        let events = &self.monitor.shared_state.lock().unwrap().logs;
+        let list = &mut self.monitor.shared_state.lock().unwrap().logs;
 
-        let items: Vec<ListItem> = events
-            .iter()
-            .rev()
-            .map(|e| {
-                let (prefix, color) = match e.event_type {
-                    MonitorEventType::Error => ("[ERR]  ", Color::Red),
-                    MonitorEventType::CreatedFile => ("[CREATE]", Color::Green),
-                    MonitorEventType::ModifiedFile => ("[MODIFY]", Color::Blue),
-                    MonitorEventType::DeletedFile => ("[DELETE]", Color::Magenta),
-                    MonitorEventType::StopMonitor => ("[STOP]", Color::Yellow),
-                    MonitorEventType::Info => ("[INFO]  ", Color::White),
-                };
-
-                let time_str = e
-                    .time
-                    .map(|t| t.format("%H:%M:%S").to_string())
-                    .unwrap_or_else(|| "--:--:--".into());
-
-                let text = format!("{prefix} {time_str} {}", e.message);
-
-                let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
-                let options = textwrap::Options::new(area.width as usize)
-                    .word_splitter(WordSplitter::Hyphenation(dictionary));
-
-                let wrapped_lines: Vec<String> = textwrap::wrap(&text, options)
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect();
-
-                let lines: Vec<Line> = wrapped_lines
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, line)| {
-                        if index == 0 {
-                            let parts: Vec<&str> = line.splitn(2, prefix).collect();
-                            Line::from(vec![
-                                Span::styled(prefix.to_string(), Style::new().fg(color)),
-                                Span::from(parts[1].to_string()),
-                            ])
-                        } else {
-                            Line::from(line)
-                        }
-                    })
-                    .collect();
-
-                ListItem::new(Text::from(lines))
-            })
-            .collect();
-
-        StatefulWidgetRef::render_ref(
-            &List::new(items)
-                .block(Block::default().borders(Borders::NONE))
-                .highlight_style(MENU_HIGHLIGHT_STYLE),
+        StatefulWidget::render(
+             list,
             area,
             buf,
             &mut *self.list_state.borrow_mut(),

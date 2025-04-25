@@ -7,7 +7,7 @@ use std::time::Duration;
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use notify::{Error, Event as NotifyEvent, RecursiveMode, Result, Watcher};
 
-use crate::apps::file_monitor::MonitorStatus::*;
+use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
 
 const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
@@ -22,7 +22,7 @@ pub struct SharedState {
     pub elapsed_time: Duration,
     pub status: MonitorStatus,
     pub file_analyzer: FileAnalyzer,
-    pub logs: VecDeque<MonitorEvent>,
+    pub logs: WrapList,
     pub should_stop: bool,
 }
 
@@ -47,12 +47,14 @@ pub struct FileWhatchInfo {
     last_byte_read_to: usize,
 }
 
+#[derive(Clone, Debug)]
 pub struct MonitorEvent {
     pub time: Option<DateTime<FixedOffset>>,
     pub event_type: MonitorEventType,
     pub message: String,
 }
 
+#[derive(Clone, Debug)]
 pub enum MonitorEventType {
     StopMonitor,
     Error,
@@ -69,7 +71,7 @@ impl Monitor {
             elapsed_time: Duration::from_secs(0),
             status: Stopped,
             file_analyzer: FileAnalyzer::default(),
-            logs: VecDeque::with_capacity(log_size),
+            logs: WrapList::new(log_size),
             should_stop: false,
         }));
 
@@ -200,9 +202,6 @@ impl Monitor {
 
 impl SharedState {
     fn add_event(&mut self, event: MonitorEvent) {
-        if self.logs.len() == self.logs.capacity() {
-            self.logs.pop_front();
-        }
-        self.logs.push_back(event);
+        self.logs.add_raw_item(event);
     }
 }

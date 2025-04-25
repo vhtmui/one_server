@@ -14,13 +14,13 @@ use crate::apps::{
     file_monitor::{MonitorEvent, MonitorEventType},
 };
 
-pub struct WrapList<'a> {
+pub struct WrapList {
     pub raw_list: VecDeque<MonitorEvent>,
-    pub list: VecDeque<ListItem<'a>>,
+    pub list: VecDeque<ListItem<'static>>,
     pub wrap_len: Option<usize>,
 }
 
-impl WrapList<'_> {
+impl WrapList {
     pub fn new(capacity: usize) -> Self {
         Self {
             raw_list: VecDeque::with_capacity(capacity),
@@ -33,7 +33,9 @@ impl WrapList<'_> {
         if self.list.len() == self.wrap_len.unwrap_or_default() {
             self.raw_list.pop_front();
         }
-        self.raw_list.push_back(item);
+        self.raw_list.push_back(item.clone());
+
+        self.add_item(item);
     }
 
     pub fn add_item(&mut self, e: MonitorEvent) {
@@ -144,7 +146,7 @@ impl WrapList<'_> {
     }
 }
 
-impl StatefulWidget for &mut WrapList<'_> {
+impl StatefulWidget for &mut WrapList {
     type State = ListState;
     fn render(
         self,
@@ -152,9 +154,11 @@ impl StatefulWidget for &mut WrapList<'_> {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
-        if self.wrap_len == None {
+        if self.wrap_len != Some(area.width as usize) {
             self.wrap_len = Some(area.width as usize);
+            self.update_list();
         }
+
         let items = self.list.clone();
         StatefulWidgetRef::render_ref(
             &List::new(items)
