@@ -60,10 +60,10 @@ const MENU_JSON: &str = r#"
 
 pub struct FileMonitor {
     title: String,
-    menu_state: RefCell<MenuState>,
     menu_struct: SerializableMenuItem,
+    menu_state: RefCell<MenuState>,
     monitor: Monitor,
-    list_state: RefCell<ListState>,
+    log_list_state: RefCell<ListState>,
     current_area: bool,
 }
 
@@ -75,7 +75,7 @@ impl FileMonitor {
             title,
             menu_struct,
             monitor: Monitor::new(path, log_size),
-            list_state: RefCell::new(ListState::default()),
+            log_list_state: RefCell::new(ListState::default()),
             current_area: true,
         }
     }
@@ -156,7 +156,7 @@ impl FileMonitor {
              list,
             area,
             buf,
-            &mut *self.list_state.borrow_mut(),
+            &mut *self.log_list_state.borrow_mut(),
         );
     }
 }
@@ -232,10 +232,10 @@ impl MyWidgets for FileMonitor {
                 } else {
                     match code {
                         KeyCode::Up => {
-                            self.list_state.borrow_mut().scroll_up_by(1);
+                            self.log_list_state.borrow_mut().scroll_up_by(4);
                         }
                         KeyCode::Down => {
-                            self.list_state.borrow_mut().scroll_down_by(1);
+                            self.log_list_state.borrow_mut().scroll_down_by(4);
                         }
                         _ => {}
                     }

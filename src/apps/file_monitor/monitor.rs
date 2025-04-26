@@ -1,3 +1,5 @@
+use crate::log;
+
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, mpsc};
@@ -5,9 +7,12 @@ use std::thread::{self};
 use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
-use notify::{Error, Event as NotifyEvent, RecursiveMode, Result, Watcher};
+use notify::{Error, Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
 
-use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
+use crate::{
+    apps::file_monitor::{MonitorStatus::*, monitor},
+    my_widgets::wrap_list::WrapList,
+};
 
 const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
@@ -21,7 +26,7 @@ pub struct SharedState {
     pub lunch_time: Option<DateTime<FixedOffset>>,
     pub elapsed_time: Duration,
     pub status: MonitorStatus,
-    pub file_analyzer: FileAnalyzer,
+    pub file_statistic: FileStatistics,
     pub logs: WrapList,
     pub should_stop: bool,
 }
@@ -35,7 +40,7 @@ pub enum MonitorStatus {
 }
 
 #[derive(Default)]
-pub struct FileAnalyzer {
+pub struct FileStatistics {
     files_watched: Vec<FileWhatchInfo>,
     files_got: usize,
     files_recorded: usize,
@@ -43,7 +48,7 @@ pub struct FileAnalyzer {
 
 pub struct FileWhatchInfo {
     path: PathBuf,
-    last_size: usize,
+    last_size_record: usize,
     last_byte_read_to: usize,
 }
 
@@ -70,7 +75,7 @@ impl Monitor {
             lunch_time: None,
             elapsed_time: Duration::from_secs(0),
             status: Stopped,
-            file_analyzer: FileAnalyzer::default(),
+            file_statistic: FileStatistics::default(),
             logs: WrapList::new(log_size),
             should_stop: false,
         }));
@@ -84,11 +89,12 @@ impl Monitor {
 
     pub fn start_monitor(&mut self) -> Result<()> {
         if self.shared_state.lock().unwrap().status == Running {
-            self.shared_state.lock().unwrap().add_event(MonitorEvent {
-                time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                event_type: MonitorEventType::Error,
-                message: "Monitor is already running".to_string(),
-            });
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                MonitorEventType::Error,
+                "Monitor is already running".to_string()
+            );
             return Ok(());
         }
 
@@ -96,14 +102,15 @@ impl Monitor {
         if !Path::new(&path).exists() {
             let current_path = std::env::current_dir()?;
 
-            self.shared_state.lock().unwrap().add_event(MonitorEvent {
-                time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                event_type: MonitorEventType::Error,
-                message: format!(
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                MonitorEventType::Error,
+                format!(
                     "Path does not exist, current path: {}",
                     current_path.display()
-                ),
-            });
+                )
+            );
             return Ok(());
         }
 
@@ -118,11 +125,12 @@ impl Monitor {
 
         self.handle = Some(handle);
 
-        self.shared_state.lock().unwrap().add_event(MonitorEvent {
-            time: Some(Utc::now().with_timezone(TIME_ZONE)),
-            event_type: MonitorEventType::CreatedFile,
-            message: "Monitor started".to_string(),
-        });
+        log!(
+            self.shared_state,
+            Utc::now().with_timezone(TIME_ZONE),
+            MonitorEventType::Info,
+            "Monitor started".to_string()
+        );
         Ok(())
     }
 
@@ -134,17 +142,21 @@ impl Monitor {
         if let Some(handle) = self.handle.take() {
             match handle.is_finished() {
                 true => {
-                    self.shared_state.lock().unwrap().add_event(MonitorEvent {
-                        time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                        event_type: MonitorEventType::StopMonitor,
-                        message: "Monitor stopped.".to_string(),
-                    });
+                    log!(
+                        self.shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::StopMonitor,
+                        "Monitor stopped.".to_string()
+                    );
                 }
-                false => self.shared_state.lock().unwrap().add_event(MonitorEvent {
-                    time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                    event_type: MonitorEventType::Error,
-                    message: "Monitor does not stopped!".to_string(),
-                }),
+                false => {
+                    log!(
+                        self.shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::Error,
+                        "Monitor is already stopped.".to_string()
+                    );
+                }
             }
         }
     }
@@ -168,21 +180,30 @@ impl Monitor {
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(event) => {
                     let event = event.unwrap();
-                    shared_state.lock().unwrap().add_event(MonitorEvent {
-                        time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                        event_type: MonitorEventType::ModifiedFile,
-                        message: format!("Notify event: {:?}, {:?}", event.kind, event.paths),
-                    });
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::ModifiedFile,
+                        format!("Notify event: {:?}, {:?}", event.kind, event.paths)
+                    );
+
+                    match event.kind {
+                        EventKind::Modify(_) => {
+                            Self::do_something();
+                        }
+                        _ => {}
+                    }
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     continue;
                 }
                 Err(e) => {
-                    shared_state.lock().unwrap().add_event(MonitorEvent {
-                        time: Some(Utc::now().with_timezone(TIME_ZONE)),
-                        event_type: MonitorEventType::Error,
-                        message: format!("Error: {:?}", e),
-                    });
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::Error,
+                        format!("Error: {:?}", e)
+                    );
                     break;
                 }
             }
@@ -191,17 +212,26 @@ impl Monitor {
         Ok(())
     }
 
-    fn analyze_content(content: &str) -> String {
-        content.to_string()
-    }
-
     pub fn get_status(&self) -> MonitorStatus {
         self.shared_state.lock().unwrap().status.clone()
     }
+
+    pub fn do_something() {}
 }
 
 impl SharedState {
     fn add_event(&mut self, event: MonitorEvent) {
         self.logs.add_raw_item(event);
     }
+}
+
+#[macro_export]
+macro_rules! log {
+    ($shared_state:expr, $time:expr, $event_type:expr, $message:expr $(,)* ) => {
+        $shared_state.lock().unwrap().add_event(MonitorEvent {
+            time: Some($time),
+            event_type: $event_type,
+            message: $message,
+        })
+    };
 }

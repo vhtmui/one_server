@@ -18,7 +18,6 @@ pub struct WrapList {
     pub raw_list: VecDeque<MonitorEvent>,
     pub list: VecDeque<ListItem<'static>>,
     pub wrap_len: Option<usize>,
-    // 新增：缓存分词字典避免重复加载
     dictionary: Standard,
 }
 
