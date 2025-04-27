@@ -33,7 +33,6 @@ impl WrapList {
         }
     }
 
-    // 新增：提取重复的列表项创建逻辑
     fn create_list_item(&self, e: &MonitorEvent) -> ListItem<'static> {
         let (prefix, color) = match e.event_type {
             MonitorEventType::Error => ("[ERR]  ", Color::Red),
@@ -65,7 +64,6 @@ impl WrapList {
             .map(|(index, line)| {
                 if index == 0 {
                     let parts: Vec<&str> = line.splitn(2, prefix).collect();
-                    // 新增：处理splitn可能的空值情况
                     if parts.len() < 2 {
                         panic!("Unexpected line format when splitting prefix: {}", line);
                     }
@@ -82,27 +80,22 @@ impl WrapList {
         ListItem::new(Text::from(lines))
     }
 
-    // 修改：使用新创建方法简化代码
     pub fn add_item(&mut self, e: MonitorEvent) {
         let item = self.create_list_item(&e);
         self.list.push_back(item);
     }
 
-    // 修改：使用新创建方法并优化转换逻辑
     pub fn update_list(&mut self) {
         let items: Vec<ListItem> = self
             .raw_list
             .iter()
-            .rev()
             .map(|e| self.create_list_item(e))
             .collect();
-        // 使用into_iter转换为VecDeque
         self.list = items.into_iter().collect();
     }
 
-    // 修改：修复容量判断逻辑
     pub fn add_raw_item(&mut self, item: MonitorEvent) {
-        let max_len = self.wrap_len.unwrap_or(usize::MAX);
+        let max_len = self.wrap_len.unwrap_or(500);
         if self.list.len() == max_len {
             self.raw_list.pop_front();
         }
@@ -111,9 +104,7 @@ impl WrapList {
         self.add_item(item);
     }
 }
-// 修改：构造函数初始化字典并处理加载错误
 
-// 修改：优化渲染时的宽度判断
 impl StatefulWidget for &mut WrapList {
     type State = ListState;
     fn render(

@@ -129,7 +129,29 @@ impl FileMonitor {
             .title("Status Area")
             .title_style(TITLE_STYLE)
             .title_alignment(Alignment::Center);
-        block.render(area, buf);
+
+        let status = Line::from(format!("Status: {:?}", self.monitor.get_status()));
+
+        let lunch_time = Line::from(format!("Lunch time: {}", self.monitor.get_lunch_time()));
+
+        let elapsed_time = Line::from(format!("Elapsed time: {}", self.monitor.get_elapsed_time()));
+
+        let files_got = Line::from(format!("Files got: {:?}", self.monitor.files_got()));
+
+        let files_recorded = Line::from(format!(
+            "Files recorded: {:?}",
+            self.monitor.files_recorded()
+        ));
+
+        let text = Text::from(vec![
+            status,
+            lunch_time,
+            elapsed_time,
+            files_got,
+            files_recorded,
+        ]);
+
+        Paragraph::new(text).block(block).render_ref(area, buf);
     }
 
     pub fn render_log_area(&self, area: Rect, buf: &mut Buffer, highlight: bool) {
@@ -152,12 +174,9 @@ impl FileMonitor {
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
         let list = &mut self.monitor.shared_state.lock().unwrap().logs;
 
-        StatefulWidget::render(
-             list,
-            area,
-            buf,
-            &mut *self.log_list_state.borrow_mut(),
-        );
+        self.log_list_state.borrow_mut().select_last();
+
+        StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
     }
 }
 
