@@ -58,16 +58,17 @@ impl FileStatistics {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileWatchInfo {
-    lastime_size_record: usize,
-    lastime_byte_read_to: usize,
+    lastime_size: usize,
+    current_size: usize,
 }
 
 impl FileWatchInfo {
-    pub fn new(lastime_size_record: usize, lastime_byte_read_to: usize) -> Self {
+    pub fn new(lastime_size: usize, current_size: usize) -> Self {
         FileWatchInfo {
-            lastime_size_record,
-            lastime_byte_read_to,
+            lastime_size,
+            current_size,
         }
     }
 }
@@ -219,6 +220,27 @@ impl Monitor {
                     match event.kind {
                         EventKind::Modify(_) => {
                             let path = event.paths[0].clone();
+
+                            let mut update_result = None;
+                            smol::block_on(async {
+                                update_result =
+                                    shared_state.lock().unwrap().add_file_watchinfo(path).await;
+                            });
+
+                            if let Some(info) = update_result {
+                                log!(
+                                    shared_state,
+                                    Utc::now().with_timezone(TIME_ZONE),
+                                    MonitorEventType::Info,
+                                    format!(
+                                        "File watched updated from {} bytes to {}",
+                                        info.lastime_size, info.current_size
+                                    )
+                                );
+
+                                if info.current_size > info.lastime_size {
+                                }
+                            }
                         }
                         EventKind::Create(_) => {
                             let path = event.paths[0].clone();
@@ -270,7 +292,11 @@ impl Monitor {
     }
 
     pub fn files_recorded(&self) -> usize {
-        self.shared_state.lock().unwrap().file_statistic.files_recorded
+        self.shared_state
+            .lock()
+            .unwrap()
+            .file_statistic
+            .files_recorded
     }
 }
 
@@ -290,14 +316,19 @@ impl SharedState {
         self.status = status;
     }
 
-    async fn add_file_watchinfo(&mut self, path: PathBuf) {
+    async fn add_file_watchinfo(&mut self, path: PathBuf) -> Option<FileWatchInfo> {
         let file_size = fs::metadata(&path).await.unwrap().len();
 
-        let file_watch_info = FileWatchInfo::new(file_size as usize, 0);
-
+        let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(&path) {
+            FileWatchInfo::new(info.current_size, file_size as usize)
+        } else {
+            FileWatchInfo::new(0, file_size as usize)
+        };
         self.file_statistic
             .files_watched
-            .insert(path, file_watch_info);
+            .insert(path, file_watch_info.clone());
+
+        Some(file_watch_info)
     }
 }
 
