@@ -2,14 +2,15 @@ use crate::log;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
+use std::string::FromUtf8Error;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 use std::time::Duration;
 
-use chrono::format::OffsetFormat;
 use chrono::{DateTime, FixedOffset, TimeDelta, TimeZone, Utc};
 use notify::{Error, Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
 use smol::fs;
+use smol::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 
 use crate::{
     apps::file_monitor::{MonitorStatus::*, monitor},
@@ -216,25 +217,39 @@ impl Monitor {
 
                     match event.kind {
                         EventKind::Modify(_) => {
-                            let path = event.paths[0].clone();
+                            smol::block_on(async {
+                                let path = event.paths[0].clone();
 
-                            let update_result = smol::block_on(async {
-                                shared_state.lock().unwrap().add_file_watchinfo(path).await
+                                let update_result = shared_state
+                                    .lock()
+                                    .unwrap()
+                                    .insert_file_watchinfo(&path)
+                                    .await;
+
+                                if let Some(info) = update_result {
+                                    log!(
+                                        shared_state,
+                                        Utc::now().with_timezone(TIME_ZONE),
+                                        MonitorEventType::Info,
+                                        format!(
+                                            "File watched updated from {} bytes to {}",
+                                            info.lastime_size, info.current_size
+                                        )
+                                    );
+
+                                    if info.current_size > info.lastime_size {
+                                        let buf = Self::extract_file_changes(
+                                            &path,
+                                            info.lastime_size,
+                                            info.current_size,
+                                        )
+                                        .await
+                                        .unwrap();
+
+                                        if buf.len() > 0 {}
+                                    }
+                                }
                             });
-
-                            if let Some(info) = update_result {
-                                log!(
-                                    shared_state,
-                                    Utc::now().with_timezone(TIME_ZONE),
-                                    MonitorEventType::Info,
-                                    format!(
-                                        "File watched updated from {} bytes to {}",
-                                        info.lastime_size, info.current_size
-                                    )
-                                );
-
-                                if info.current_size > info.lastime_size {}
-                            }
                         }
                         EventKind::Create(_) => {
                             let path = event.paths[0].clone();
@@ -258,6 +273,34 @@ impl Monitor {
         }
         drop(watcher);
         Ok(())
+    }
+
+    pub async fn extract_file_changes(
+        path: &Path,
+        last_size: usize,
+        current_size: usize,
+    ) -> std::result::Result<String, FromUtf8Error> {
+        let mut file = smol::fs::File::open(path).await;
+        let offset = last_size as u64;
+        let length = (current_size - last_size) as u64;
+
+        let mut buffer = vec![0; length as usize];
+        file.seek(SeekFrom::Start(offset)).await;
+        file.read_exact(&mut buffer).await;
+
+        String::from_utf8(buffer)
+    }
+
+    fn extract_path_from_log_line(line: &str) -> Option<PathBuf> {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 5 || parts[3] != "226" || parts[2] != "STOR" {
+            return None;
+        }
+        let path_str = parts.last()?;
+        if path_str.is_empty() {
+            return None;
+        }
+        Some(PathBuf::from(path_str))
     }
 
     pub fn set_lunch_time(&self) {
@@ -312,12 +355,13 @@ impl Monitor {
 }
 
 impl SharedState {
-    fn add_event(&mut self, event: MonitorEvent) {
+    fn add_logs(&mut self, event: MonitorEvent) {
         self.logs.add_raw_item(event);
     }
 
-    async fn add_file_watchinfo(&mut self, path: PathBuf) -> Option<FileWatchInfo> {
-        let file_size = fs::metadata(&path).await.unwrap().len();
+    /// return old or init value if not exist.
+    async fn insert_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
+        let file_size = fs::metadata(path).await.unwrap().len();
 
         let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(&path) {
             FileWatchInfo::new(info.current_size, file_size as usize)
@@ -326,7 +370,7 @@ impl SharedState {
         };
         self.file_statistic
             .files_watched
-            .insert(path, file_watch_info.clone());
+            .insert(path.clone(), file_watch_info.clone());
 
         Some(file_watch_info)
     }
@@ -335,7 +379,7 @@ impl SharedState {
 #[macro_export]
 macro_rules! log {
     ($shared_state:expr, $time:expr, $event_type:expr, $message:expr $(,)* ) => {
-        $shared_state.lock().unwrap().add_event(MonitorEvent {
+        $shared_state.lock().unwrap().add_logs(MonitorEvent {
             time: Some($time),
             event_type: $event_type,
             message: $message,
