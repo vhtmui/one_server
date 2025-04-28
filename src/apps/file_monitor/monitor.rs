@@ -25,7 +25,7 @@ pub struct Monitor {
 }
 
 pub struct SharedState {
-    pub lunch_time: DateTime<FixedOffset>,
+    pub launch_time: DateTime<FixedOffset>,
     pub elapsed_time: TimeDelta,
     pub status: MonitorStatus,
     pub file_statistic: FileStatistics,
@@ -93,7 +93,7 @@ pub enum MonitorEventType {
 impl Monitor {
     pub fn new(path: String, log_size: usize) -> Self {
         let shared_state = Arc::new(Mutex::new(SharedState {
-            lunch_time: DateTime::from_timestamp(0, 0)
+            launch_time: DateTime::from_timestamp(0, 0)
                 .unwrap()
                 .with_timezone(TIME_ZONE), // Updated to DateTime<FixedOffset>
             elapsed_time: TimeDelta::zero(),
@@ -141,7 +141,7 @@ impl Monitor {
         self.set_status(Running);
 
         let time = Utc::now().with_timezone(TIME_ZONE);
-        self.shared_state.lock().unwrap().lunch_time = time;
+        self.shared_state.lock().unwrap().launch_time = time;
 
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, &path));
@@ -195,7 +195,7 @@ impl Monitor {
         loop {
             let mut ss = shared_state.lock().unwrap();
 
-            ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.lunch_time;
+            ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.launch_time;
 
             if ss.should_stop {
                 ss.status = Stopped;
@@ -218,10 +218,8 @@ impl Monitor {
                         EventKind::Modify(_) => {
                             let path = event.paths[0].clone();
 
-                            let mut update_result = None;
-                            smol::block_on(async {
-                                update_result =
-                                    shared_state.lock().unwrap().add_file_watchinfo(path).await;
+                            let update_result = smol::block_on(async {
+                                shared_state.lock().unwrap().add_file_watchinfo(path).await
                             });
 
                             if let Some(info) = update_result {
@@ -235,8 +233,7 @@ impl Monitor {
                                     )
                                 );
 
-                                if info.current_size > info.lastime_size {
-                                }
+                                if info.current_size > info.lastime_size {}
                             }
                         }
                         EventKind::Create(_) => {
@@ -264,14 +261,14 @@ impl Monitor {
     }
 
     pub fn set_lunch_time(&self) {
-        self.shared_state.lock().unwrap().lunch_time = Utc::now().with_timezone(TIME_ZONE);
+        self.shared_state.lock().unwrap().launch_time = Utc::now().with_timezone(TIME_ZONE);
     }
 
     pub fn get_lunch_time(&self) -> String {
         self.shared_state
             .lock()
             .unwrap()
-            .lunch_time
+            .launch_time
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
     }
 
@@ -287,7 +284,7 @@ impl Monitor {
 
     pub fn reset_time(&self) {
         let mut ss = self.shared_state.lock().unwrap();
-        ss.lunch_time = DateTime::from_timestamp(0, 0)
+        ss.launch_time = DateTime::from_timestamp(0, 0)
             .unwrap()
             .with_timezone(TIME_ZONE);
         ss.elapsed_time = TimeDelta::zero();
