@@ -49,29 +49,10 @@ pub struct FileStatistics {
     files_recorded: usize,
 }
 
-impl FileStatistics {
-    pub fn new() -> Self {
-        FileStatistics {
-            files_watched: HashMap::new(),
-            files_got: 0,
-            files_recorded: 0,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileWatchInfo {
     lastime_size: usize,
     current_size: usize,
-}
-
-impl FileWatchInfo {
-    pub fn new(lastime_size: usize, current_size: usize) -> Self {
-        FileWatchInfo {
-            lastime_size,
-            current_size,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -246,7 +227,17 @@ impl Monitor {
                                         .await
                                         .unwrap();
 
-                                        if buf.len() > 0 {}
+                                        if buf.len() > 0 {
+                                            if let Ok(content) = Self::extract_file_changes(
+                                                &path,
+                                                info.lastime_size,
+                                                info.current_size,
+                                            )
+                                            .await
+                                            {
+                                                Self::extract_path_from_log_line(content);
+                                            }
+                                        }
                                     }
                                 }
                             });
@@ -279,19 +270,19 @@ impl Monitor {
         path: &Path,
         last_size: usize,
         current_size: usize,
-    ) -> std::result::Result<String, FromUtf8Error> {
-        let mut file = smol::fs::File::open(path).await;
+    ) -> Result<String> {
+        let mut file = smol::fs::File::open(path).await?;
         let offset = last_size as u64;
         let length = (current_size - last_size) as u64;
 
         let mut buffer = vec![0; length as usize];
-        file.seek(SeekFrom::Start(offset)).await;
-        file.read_exact(&mut buffer).await;
+        file.seek(SeekFrom::Start(offset)).await?;
+        file.read_exact(&mut buffer).await?;
 
-        String::from_utf8(buffer)
+        String::from_utf8(buffer).map_err(|e| Error::generic(&format!("Invalid UTF-8: {}", e)))
     }
 
-    fn extract_path_from_log_line(line: &str) -> Option<PathBuf> {
+    fn extract_path_from_log_line(line: String) -> Option<PathBuf> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 5 || parts[3] != "226" || parts[2] != "STOR" {
             return None;
@@ -363,10 +354,16 @@ impl SharedState {
     async fn insert_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
         let file_size = fs::metadata(path).await.unwrap().len();
 
-        let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(&path) {
-            FileWatchInfo::new(info.current_size, file_size as usize)
+        let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(path) {
+            FileWatchInfo {
+                lastime_size: info.current_size,
+                current_size: file_size as usize,
+            }
         } else {
-            FileWatchInfo::new(0, file_size as usize)
+            FileWatchInfo {
+                lastime_size: 0,
+                current_size: file_size as usize,
+            }
         };
         self.file_statistic
             .files_watched
