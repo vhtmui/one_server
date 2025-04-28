@@ -137,11 +137,8 @@ impl Monitor {
             return Ok(());
         }
 
-        {
-            let mut locked_state = self.shared_state.lock().unwrap();
-            locked_state.lunch_time = Utc::now().with_timezone(TIME_ZONE);
-            locked_state.set_status(Running);
-        }
+        self.set_lunch_time();
+        self.set_status(Running);
 
         let time = Utc::now().with_timezone(TIME_ZONE);
         self.shared_state.lock().unwrap().lunch_time = time;
@@ -168,7 +165,7 @@ impl Monitor {
         if let Some(handle) = self.handle.take() {
             match handle.is_finished() {
                 true => {
-                    self.shared_state.lock().unwrap().reset_time();
+                    self.reset_time();
                     log!(
                         self.shared_state,
                         Utc::now().with_timezone(TIME_ZONE),
@@ -266,6 +263,10 @@ impl Monitor {
         Ok(())
     }
 
+    pub fn set_lunch_time(&self) {
+        self.shared_state.lock().unwrap().lunch_time = Utc::now().with_timezone(TIME_ZONE);
+    }
+
     pub fn get_lunch_time(&self) -> String {
         self.shared_state
             .lock()
@@ -284,9 +285,18 @@ impl Monitor {
         )
     }
 
+    pub fn reset_time(&self) {
+        let mut ss = self.shared_state.lock().unwrap();
+        ss.lunch_time = DateTime::from_timestamp(0, 0)
+            .unwrap()
+            .with_timezone(TIME_ZONE);
+        ss.elapsed_time = TimeDelta::zero();
+    }
+
     pub fn get_status(&self) -> MonitorStatus {
         self.shared_state.lock().unwrap().status.clone()
     }
+
     pub fn files_got(&self) -> usize {
         self.shared_state.lock().unwrap().file_statistic.files_got
     }
@@ -298,22 +308,15 @@ impl Monitor {
             .file_statistic
             .files_recorded
     }
+
+    pub fn set_status(&self, status: MonitorStatus) {
+        self.shared_state.lock().unwrap().status = status;
+    }
 }
 
 impl SharedState {
     fn add_event(&mut self, event: MonitorEvent) {
         self.logs.add_raw_item(event);
-    }
-
-    pub fn reset_time(&mut self) {
-        self.lunch_time = DateTime::from_timestamp(0, 0)
-            .unwrap()
-            .with_timezone(TIME_ZONE);
-        self.elapsed_time = TimeDelta::zero();
-    }
-
-    fn set_status(&mut self, status: MonitorStatus) {
-        self.status = status;
     }
 
     async fn add_file_watchinfo(&mut self, path: PathBuf) -> Option<FileWatchInfo> {
