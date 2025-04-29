@@ -52,6 +52,8 @@ pub struct FileStatistics {
     files_watched: HashMap<PathBuf, FileWatchInfo>,
     files_got: usize,
     files_recorded: usize,
+    file_reading: PathBuf,
+    file_readlines: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,6 +99,33 @@ impl Monitor {
         }
     }
 
+    pub fn stop_monitor(&mut self) {
+        self.shared_state.lock().unwrap().should_stop = true;
+
+        thread::sleep(Duration::from_millis(800));
+
+        if let Some(handle) = self.handle.take() {
+            match handle.is_finished() {
+                true => {
+                    self.reset_time();
+                    log!(
+                        self.shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::StopMonitor,
+                        "Monitor stopped.".to_string()
+                    );
+                }
+                false => {
+                    log!(
+                        self.shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::Error,
+                        "Monitor is already stopped.".to_string()
+                    );
+                }
+            }
+        }
+    }
     pub fn start_monitor(&mut self) -> Result<()> {
         if self.shared_state.lock().unwrap().status == Running {
             log!(
@@ -142,34 +171,6 @@ impl Monitor {
             "Monitor started".to_string()
         );
         Ok(())
-    }
-
-    pub fn stop_monitor(&mut self) {
-        self.shared_state.lock().unwrap().should_stop = true;
-
-        thread::sleep(Duration::from_millis(800));
-
-        if let Some(handle) = self.handle.take() {
-            match handle.is_finished() {
-                true => {
-                    self.reset_time();
-                    log!(
-                        self.shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        MonitorEventType::StopMonitor,
-                        "Monitor stopped.".to_string()
-                    );
-                }
-                false => {
-                    log!(
-                        self.shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        MonitorEventType::Error,
-                        "Monitor is already stopped.".to_string()
-                    );
-                }
-            }
-        }
     }
 
     /// function run in a thread
@@ -290,7 +291,7 @@ impl Monitor {
             let line = line.unwrap();
             let words = line.split_whitespace().collect::<Vec<&str>>();
 
-            if words[3] == "STOR" && words[4] == "226" {
+            if words.len() == 6 && words[3] == "STOR" && words[4] == "226" {
                 let path_str = line.split(words[4]).collect::<Vec<&str>>()[1].trim();
                 paths.push(PathBuf::from(path_str));
             }
@@ -335,6 +336,23 @@ impl Monitor {
 
     pub fn files_got(&self) -> usize {
         self.shared_state.lock().unwrap().file_statistic.files_got
+    }
+
+    pub fn file_reading(&self) -> PathBuf {
+        self.shared_state
+            .lock()
+            .unwrap()
+            .file_statistic
+            .file_reading
+            .clone()
+    }
+
+    pub fn file_readlines(&self) -> usize {
+        self.shared_state
+            .lock()
+            .unwrap()
+            .file_statistic
+            .file_readlines
     }
 
     pub fn files_recorded(&self) -> usize {
