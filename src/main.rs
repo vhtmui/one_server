@@ -28,8 +28,6 @@ async fn main() {
         .run(&mut terminal)
         .await
         .unwrap();
-
-    ratatui::restore();
 }
 
 #[derive(Deserialize, Debug)]

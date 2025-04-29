@@ -6,6 +6,7 @@ use std::string::FromUtf8Error;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 use std::time::Duration;
+use std::{mem, panic};
 
 use chrono::{DateTime, FixedOffset, TimeDelta, TimeZone, Utc, offset};
 use crossterm::event::read;
@@ -173,6 +174,10 @@ impl Monitor {
 
     /// function run in a thread
     fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: &str) -> Result<()> {
+        let ss_clone = Arc::clone(&shared_state);
+
+        Self::set_panic_hook(ss_clone);
+
         let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
 
         let mut watcher = notify::recommended_watcher(tx)?;
@@ -180,16 +185,16 @@ impl Monitor {
         watcher.watch(Path::new(path), RecursiveMode::NonRecursive)?;
 
         loop {
-            let mut ss = shared_state.lock().unwrap();
+            let mut ss_unwrap = shared_state.lock().unwrap();
 
-            ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.launch_time;
+            ss_unwrap.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss_unwrap.launch_time;
 
-            if ss.should_stop {
-                ss.status = Stopped;
-                ss.should_stop = false;
+            if ss_unwrap.should_stop {
+                ss_unwrap.status = Stopped;
+                ss_unwrap.should_stop = false;
                 break;
             }
-            drop(ss);
+            drop(ss_unwrap);
 
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(event) => {
@@ -209,7 +214,11 @@ impl Monitor {
                                 let mut ss = shared_state.lock().unwrap();
                                 ss.update_file_watchinfo(&path).await;
 
-                                let update_result = ss.file_statistic.files_watched.get(&path);
+                                // consume `ss`
+                                let update_result =
+                                    ss.file_statistic.files_watched.get(&path).cloned();
+
+                                drop(ss);
 
                                 if let Some(info) = update_result {
                                     log!(
@@ -237,7 +246,9 @@ impl Monitor {
                                                 format!("Path extracted: {}", path.display())
                                             );
 
-                                           ss.add_file_got(); 
+                                            smol::Timer::after(Duration::from_secs(1)).await;
+
+                                            shared_state.lock().unwrap().add_file_got();
                                         }
                                     }
                                 }
@@ -337,6 +348,19 @@ impl Monitor {
     pub fn set_status(&self, status: MonitorStatus) {
         self.shared_state.lock().unwrap().status = status;
     }
+
+    fn set_panic_hook(shared_state: Arc<Mutex<SharedState>>) {
+        panic::set_hook(Box::new(move |panic_info| {
+            log!(
+                shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                MonitorEventType::Error,
+                format!("Thread panicked: {:?}", panic_info)
+            );
+            shared_state.lock().unwrap().status = Stopped;
+            shared_state.lock().unwrap().should_stop = false;
+        }));
+    }
 }
 
 impl SharedState {
@@ -368,7 +392,6 @@ impl SharedState {
     fn add_file_got(&mut self) {
         self.file_statistic.files_got += 1;
     }
-
 }
 
 #[macro_export]
