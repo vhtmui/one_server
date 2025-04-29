@@ -7,10 +7,14 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 use std::time::Duration;
 
-use chrono::{DateTime, FixedOffset, TimeDelta, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, TimeDelta, TimeZone, Utc, offset};
+use crossterm::event::read;
 use notify::{Error, Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
-use smol::fs;
-use smol::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
+use smol::{
+    fs,
+    io::{self, AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, SeekFrom},
+    stream::StreamExt,
+};
 
 use crate::{
     apps::file_monitor::{MonitorStatus::*, monitor},
@@ -51,8 +55,8 @@ pub struct FileStatistics {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileWatchInfo {
-    lastime_size: usize,
-    current_size: usize,
+    lastime_size: u64,
+    current_size: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -167,6 +171,7 @@ impl Monitor {
         }
     }
 
+    /// function run in a thread
     fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: &str) -> Result<()> {
         let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
 
@@ -201,11 +206,10 @@ impl Monitor {
                             smol::block_on(async {
                                 let path = event.paths[0].clone();
 
-                                let update_result = shared_state
-                                    .lock()
-                                    .unwrap()
-                                    .insert_file_watchinfo(&path)
-                                    .await;
+                                let mut ss = shared_state.lock().unwrap();
+                                ss.update_file_watchinfo(&path).await;
+
+                                let update_result = ss.file_statistic.files_watched.get(&path);
 
                                 if let Some(info) = update_result {
                                     log!(
@@ -219,24 +223,21 @@ impl Monitor {
                                     );
 
                                     if info.current_size > info.lastime_size {
-                                        let buf = Self::extract_file_changes(
+                                        let paths = Self::extract_path_from_log_line(
                                             &path,
                                             info.lastime_size,
-                                            info.current_size,
                                         )
-                                        .await
-                                        .unwrap();
+                                        .await;
 
-                                        if buf.len() > 0 {
-                                            if let Ok(content) = Self::extract_file_changes(
-                                                &path,
-                                                info.lastime_size,
-                                                info.current_size,
-                                            )
-                                            .await
-                                            {
-                                                Self::extract_path_from_log_line(content);
-                                            }
+                                        for path in paths {
+                                            log!(
+                                                shared_state,
+                                                Utc::now().with_timezone(TIME_ZONE),
+                                                MonitorEventType::Info,
+                                                format!("Path extracted: {}", path.display())
+                                            );
+
+                                           ss.add_file_got(); 
                                         }
                                     }
                                 }
@@ -266,32 +267,25 @@ impl Monitor {
         Ok(())
     }
 
-    pub async fn extract_file_changes(
-        path: &Path,
-        last_size: usize,
-        current_size: usize,
-    ) -> Result<String> {
-        let mut file = smol::fs::File::open(path).await?;
-        let offset = last_size as u64;
-        let length = (current_size - last_size) as u64;
+    async fn extract_path_from_log_line(path: &PathBuf, offset: u64) -> Vec<PathBuf> {
+        let file = fs::File::open(path).await.unwrap();
+        let mut reader = io::BufReader::new(file);
+        reader.seek(SeekFrom::Start(offset)).await.unwrap();
+        let mut lines = reader.lines();
 
-        let mut buffer = vec![0; length as usize];
-        file.seek(SeekFrom::Start(offset)).await?;
-        file.read_exact(&mut buffer).await?;
+        let mut paths = Vec::new();
 
-        String::from_utf8(buffer).map_err(|e| Error::generic(&format!("Invalid UTF-8: {}", e)))
-    }
+        while let Some(line) = lines.next().await {
+            let line = line.unwrap();
+            let words = line.split_whitespace().collect::<Vec<&str>>();
 
-    fn extract_path_from_log_line(line: String) -> Option<PathBuf> {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 5 || parts[3] != "226" || parts[2] != "STOR" {
-            return None;
+            if words[3] == "STOR" && words[4] == "226" {
+                let path_str = line.split(words[4]).collect::<Vec<&str>>()[1].trim();
+                paths.push(PathBuf::from(path_str));
+            }
         }
-        let path_str = parts.last()?;
-        if path_str.is_empty() {
-            return None;
-        }
-        Some(PathBuf::from(path_str))
+
+        paths
     }
 
     pub fn set_lunch_time(&self) {
@@ -350,27 +344,31 @@ impl SharedState {
         self.logs.add_raw_item(event);
     }
 
-    /// return old or init value if not exist.
-    async fn insert_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
+    /// set or init whatched file's `FileStatistics` if not exist, and return old value.
+    async fn update_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
         let file_size = fs::metadata(path).await.unwrap().len();
 
         let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(path) {
             FileWatchInfo {
                 lastime_size: info.current_size,
-                current_size: file_size as usize,
+                current_size: file_size,
             }
         } else {
             FileWatchInfo {
                 lastime_size: 0,
-                current_size: file_size as usize,
+                current_size: file_size,
             }
         };
+
         self.file_statistic
             .files_watched
-            .insert(path.clone(), file_watch_info.clone());
-
-        Some(file_watch_info)
+            .insert(path.clone(), file_watch_info.clone())
     }
+
+    fn add_file_got(&mut self) {
+        self.file_statistic.files_got += 1;
+    }
+
 }
 
 #[macro_export]
