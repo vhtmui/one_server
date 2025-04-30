@@ -61,7 +61,7 @@ impl Apps {
         }
     }
 
-    pub async fn run(
+    pub fn run(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<bool, std::io::Error> {
@@ -87,8 +87,6 @@ impl Apps {
                         }
                     }
                 }
-            } else {
-                smol::future::yield_now().await;
             }
         }
 

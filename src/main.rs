@@ -26,7 +26,6 @@ async fn main() {
     add_widgets!(app, file_monitor)
         .set_current_app(0)
         .run(&mut terminal)
-        .await
         .unwrap();
 }
 
