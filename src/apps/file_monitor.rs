@@ -140,11 +140,11 @@ impl FileMonitor {
 
         let file_reading = Line::from(format!("File reading: {:?}", self.monitor.file_reading()));
 
-        let file_readlines = Line::from(format!("File readlines: {:?}", self.monitor.file_readlines()));
+        let file_readlines = Line::from(format!("File readlines: {:?}", self.monitor.get_file_readlines()));
 
         let files_recorded = Line::from(format!(
             "Files recorded: {:?}",
-            self.monitor.files_recorded()
+            self.monitor.get_files_recorded()
         ));
 
         let text = Text::from(vec![

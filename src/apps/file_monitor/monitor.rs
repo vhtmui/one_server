@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 use std::time::Duration;
 
-use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
+use chrono::{DateTime, FixedOffset, TimeDelta, Utc, offset};
 use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
 use smol::{
     fs,
@@ -53,10 +53,10 @@ pub struct FileStatistics {
     file_readlines: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct FileWatchInfo {
-    lastime_size: u64,
-    current_size: u64,
+    last_read_pos: u64,
+    file_size: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -184,20 +184,27 @@ impl Monitor {
                 .watch(Path::new(path), RecursiveMode::NonRecursive)
                 .unwrap();
 
-            loop {
+            'outer: loop {
                 let ss_clone = shared_state.clone();
 
                 let should_stop = smol::spawn(async move {
-                    let mut ss_unwrap = ss_clone.lock().unwrap();
-                    ss_unwrap.elapsed_time =
-                        Utc::now().with_timezone(TIME_ZONE) - ss_unwrap.launch_time;
+                    loop {
+                        let is_should_stop = {
+                            let mut ss = ss_clone.lock().unwrap();
+                            ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.launch_time;
+                            ss.should_stop
+                        };
 
-                    if ss_unwrap.should_stop {
-                        ss_unwrap.status = Stopped;
-                        ss_unwrap.should_stop = false;
-                        return true;
+                        if is_should_stop {
+                            let mut ss = ss_clone.lock().unwrap();
+                            ss.status = Stopped;
+                            ss.should_stop = false;
+                            break;
+                        }
+
+                        future::yield_now().await;
                     }
-                    false
+                    1
                 });
 
                 match rx.recv_timeout(Duration::from_millis(500)) {
@@ -214,64 +221,95 @@ impl Monitor {
                             EventKind::Modify(_) => {
                                 let path = event.paths[0].clone();
 
-                                shared_state
+                                let old_file_size = shared_state
                                     .lock()
                                     .unwrap()
                                     .update_file_watchinfo(&path)
-                                    .await;
+                                    .clone();
+
+                                let current_file_size = shared_state
+                                    .lock()
+                                    .unwrap()
+                                    .file_statistic
+                                    .files_watched
+                                    .get(&path)
+                                    .unwrap()
+                                    .file_size;
+
+                                log!(
+                                    shared_state,
+                                    Utc::now().with_timezone(TIME_ZONE),
+                                    MonitorEventType::Info,
+                                    format!(
+                                        "File watched updated from {} bytes to {}",
+                                        old_file_size.unwrap_or_default().file_size,
+                                        current_file_size
+                                    )
+                                );
 
                                 let ss_clone2 = shared_state.clone();
 
-                                smol::spawn(async move {
-                                    let (last_size, current_size) = {
-                                        let ss = ss_clone2.lock().unwrap();
+                                let est = smol::spawn(async move {
+                                    'est: loop {
+                                        let (last_read_pos, file_size) = {
+                                            let ss = ss_clone2.lock().unwrap();
 
-                                        if let Some(info) =
-                                            ss.file_statistic.files_watched.get(&path).cloned()
-                                        {
-                                            (info.lastime_size, info.current_size)
-                                        } else {
-                                            return;
-                                        }
-                                    };
-
-                                    log!(
-                                        ss_clone2,
-                                        Utc::now().with_timezone(TIME_ZONE),
-                                        MonitorEventType::Info,
-                                        format!(
-                                            "File watched updated from {} bytes to {}",
-                                            last_size, current_size
-                                        )
-                                    );
-
-                                    if current_size > last_size {
-                                        let mut paths_stream = Box::pin(
-                                            Self::extract_path_stream(&path, last_size).await,
-                                        );
-
-                                        while let Some(extracted_path) = paths_stream.next().await {
-                                            if ss_clone2.lock().unwrap().should_stop {
-                                                break;
+                                            if let Some(info) =
+                                                ss.file_statistic.files_watched.get(&path).cloned()
+                                            {
+                                                (info.last_read_pos, info.file_size)
+                                            } else {
+                                                return 2;
                                             }
-                                            log!(
-                                                ss_clone2,
-                                                Utc::now().with_timezone(TIME_ZONE),
-                                                MonitorEventType::Info,
-                                                format!(
-                                                    "Path extracted: {} at offset {}",
-                                                    extracted_path.0.display(),
-                                                    extracted_path.1
-                                                )
+                                        };
+
+                                        if file_size > last_read_pos {
+                                            let mut paths_stream = Box::pin(
+                                                Self::extract_path_stream(&path, last_read_pos)
+                                                    .await,
                                             );
 
-                                            smol::Timer::after(Duration::from_secs(1)).await;
+                                            while let Some((extracted_path, offset)) =
+                                                paths_stream.next().await
+                                            {
+                                                // update the offset read to.
+                                                ss_clone2.lock().unwrap().set_file_watchinfo(
+                                                    &path,
+                                                    FileWatchInfo {
+                                                        last_read_pos: offset,
+                                                        file_size,
+                                                    },
+                                                );
 
-                                            ss_clone2.lock().unwrap().add_file_got();
+                                                // if
+                                                if ss_clone2.lock().unwrap().status == Stopped {
+                                                    break 'est;
+                                                }
+                                                log!(
+                                                    ss_clone2,
+                                                    Utc::now().with_timezone(TIME_ZONE),
+                                                    MonitorEventType::Info,
+                                                    format!(
+                                                        "Path extracted: {} at offset {}",
+                                                        extracted_path.display(),
+                                                        offset
+                                                    )
+                                                );
+
+                                                smol::Timer::after(Duration::from_secs(1)).await;
+
+                                                ss_clone2.lock().unwrap().add_file_got();
+                                            }
                                         }
                                     }
-                                })
-                                .detach();
+                                    2
+                                });
+
+                                let result = smol::future::race(est, should_stop).await;
+
+                                if result == 1 {
+                                    break 'outer;
+                                }
                             }
                             EventKind::Create(_) => {
                                 let path = event.paths[0].clone();
@@ -291,10 +329,6 @@ impl Monitor {
                         );
                         break;
                     }
-                }
-
-                if should_stop.await {
-                    break;
                 }
             }
             drop(watcher);
@@ -381,7 +415,7 @@ impl Monitor {
             .clone()
     }
 
-    pub fn file_readlines(&self) -> usize {
+    pub fn get_file_readlines(&self) -> usize {
         self.shared_state
             .lock()
             .unwrap()
@@ -389,7 +423,7 @@ impl Monitor {
             .file_readlines
     }
 
-    pub fn files_recorded(&self) -> usize {
+    pub fn get_files_recorded(&self) -> usize {
         self.shared_state
             .lock()
             .unwrap()
@@ -420,25 +454,29 @@ impl SharedState {
         self.logs.add_raw_item(event);
     }
 
-    /// set or init whatched file's `FileStatistics` if not exist, and return old value.
-    async fn update_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
-        let file_size = fs::metadata(path).await.unwrap().len();
+    /// Set or init watch file's `FileStatistics` if not exist, and return the old value.
+    fn update_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
+        let file_size = std::fs::metadata(path).unwrap().len();
 
         let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(path) {
             FileWatchInfo {
-                lastime_size: info.current_size,
-                current_size: file_size,
+                last_read_pos: info.last_read_pos,
+                file_size,
             }
         } else {
             FileWatchInfo {
-                lastime_size: 0,
-                current_size: file_size,
+                last_read_pos: 0,
+                file_size,
             }
         };
 
         self.file_statistic
             .files_watched
             .insert(path.clone(), file_watch_info.clone())
+    }
+
+    fn set_file_watchinfo(&mut self, path: &PathBuf, info: FileWatchInfo) {
+        self.file_statistic.files_watched.insert(path.clone(), info);
     }
 
     fn add_file_got(&mut self) {
