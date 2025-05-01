@@ -33,6 +33,7 @@ impl WrapList {
         }
     }
 
+    /// Create a ListItem from a MonitorEvent, use `self.wrap_len`` and `self.dictionary` to wrap the text.
     fn create_list_item(&self, e: &MonitorEvent) -> ListItem<'static> {
         let (prefix, color) = match e.event_type {
             MonitorEventType::Error => ("[ERR]  ", Color::Red),
@@ -80,11 +81,16 @@ impl WrapList {
         ListItem::new(Text::from(lines))
     }
 
+    /// Add ListItem to `self.list`.
     pub fn add_item(&mut self, e: MonitorEvent) {
         let item = self.create_list_item(&e);
-        self.list.push_back(item);
+        self.list.push_front(item);
+        if self.list.len() > self.wrap_len.unwrap_or(500) {
+            self.list.pop_back();
+        }
     }
 
+    /// Update `self.list` from `self.raw_list`.
     pub fn update_list(&mut self) {
         let items: Vec<ListItem> = self
             .raw_list
@@ -94,12 +100,13 @@ impl WrapList {
         self.list = items.into_iter().collect();
     }
 
+    /// Add raw item of MonitorEvent to `self.raw_list`.
     pub fn add_raw_item(&mut self, item: MonitorEvent) {
         let max_len = self.wrap_len.unwrap_or(500);
         if self.list.len() == max_len {
-            self.raw_list.pop_front();
+            self.raw_list.pop_back();
         }
-        self.raw_list.push_back(item.clone());
+        self.raw_list.push_front(item.clone());
 
         self.add_item(item);
     }

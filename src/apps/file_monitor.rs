@@ -140,7 +140,10 @@ impl FileMonitor {
 
         let file_reading = Line::from(format!("File reading: {:?}", self.monitor.file_reading()));
 
-        let file_readlines = Line::from(format!("File readlines: {:?}", self.monitor.get_file_readlines()));
+        let file_readlines = Line::from(format!(
+            "File readlines: {:?}",
+            self.monitor.get_file_readlines()
+        ));
 
         let files_recorded = Line::from(format!(
             "Files recorded: {:?}",
@@ -172,15 +175,18 @@ impl FileMonitor {
             .title_alignment(Alignment::Center);
         block.render_ref(area, buf);
 
-        let log_area = block.inner(area);
+        let log_area = Rect {
+            x: area.x + 1,
+            y: area.y + 1,
+            width: area.width - 2,
+            height: area.height - 2,
+        };
 
         self.render_logs(log_area, buf);
     }
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
         let list = &mut self.monitor.shared_state.lock().unwrap().logs;
-
-        self.log_list_state.borrow_mut().select_last();
 
         StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
     }

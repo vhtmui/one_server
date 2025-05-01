@@ -221,11 +221,13 @@ impl Monitor {
                             EventKind::Modify(_) => {
                                 let path = event.paths[0].clone();
 
+                                // update and get old file size
                                 let old_file_size = shared_state
                                     .lock()
                                     .unwrap()
                                     .update_file_watchinfo(&path)
-                                    .clone();
+                                    .unwrap_or_default()
+                                    .file_size;
 
                                 let current_file_size = shared_state
                                     .lock()
@@ -242,7 +244,7 @@ impl Monitor {
                                     MonitorEventType::Info,
                                     format!(
                                         "File watched updated from {} bytes to {}",
-                                        old_file_size.unwrap_or_default().file_size,
+                                        old_file_size,
                                         current_file_size
                                     )
                                 );
@@ -281,7 +283,7 @@ impl Monitor {
                                                     },
                                                 );
 
-                                                // if
+                                                // if the monitor is stopped, break the loop.
                                                 if ss_clone2.lock().unwrap().status == Stopped {
                                                     break 'est;
                                                 }
@@ -344,28 +346,36 @@ impl Monitor {
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(offset)).await.unwrap();
 
-        let mut current_offset = offset;
-
-        stream::unfold(reader, move |mut reader| async move {
-            loop {
-                let mut line = String::new();
-                match reader.read_line(&mut line).await {
-                    Ok(0) => return None, // EOF
-                    Ok(n) => {
-                        current_offset += n as u64;
-                        let words = line.split_whitespace().collect::<Vec<&str>>();
-                        if words.len() == 6 && words[3] == "STOR" && words[4] == "226" {
-                            let path_str = line.split(words[4]).collect::<Vec<&str>>()[1].trim();
-                            return Some(((PathBuf::from(path_str), current_offset), reader));
+        stream::unfold(
+            (reader, offset),
+            move |(mut reader, mut current_offset)| async move {
+                loop {
+                    let mut line = String::new();
+                    match reader.read_line(&mut line).await {
+                        Ok(0) => return None, // EOF
+                        Ok(n) => {
+                            let new_offset = current_offset + n as u64;
+                            let words = line.split_whitespace().collect::<Vec<&str>>();
+                            if words.len() == 6 && words[3] == "STOR" && words[4] == "226" {
+                                let path_str =
+                                    line.split(words[4]).collect::<Vec<&str>>()[1].trim();
+                                return Some((
+                                    (PathBuf::from(path_str), new_offset),
+                                    (reader, new_offset),
+                                ));
+                            } else {
+                                current_offset = new_offset;
+                                continue;
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Error reading log line: {}", e);
+                            return None;
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Error reading log line: {}", e);
-                        return None;
-                    }
                 }
-            }
-        })
+            },
+        )
     }
 
     pub fn set_lunch_time(&self) {
@@ -377,7 +387,8 @@ impl Monitor {
             .lock()
             .unwrap()
             .launch_time
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string()
     }
 
     pub fn get_elapsed_time(&self) -> String {
