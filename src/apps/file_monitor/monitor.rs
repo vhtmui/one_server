@@ -117,7 +117,7 @@ impl Monitor {
                         self.shared_state,
                         Utc::now().with_timezone(TIME_ZONE),
                         MonitorEventType::Error,
-                        "Monitor is already stopped.".to_string()
+                        "Monitor doesn't stop.".to_string()
                     );
                 }
             }
@@ -298,7 +298,7 @@ impl Monitor {
                                                     )
                                                 );
 
-                                                smol::Timer::after(Duration::from_secs(1)).await;
+                                                // smol::Timer::after(Duration::from_secs(1)).await;
 
                                                 ss_clone2.lock().unwrap().add_file_got();
                                             }
