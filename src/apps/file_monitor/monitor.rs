@@ -16,6 +16,7 @@ use smol::{
     pin,
     stream::{self, StreamExt},
 };
+use futures;
 
 use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
 
@@ -109,7 +110,7 @@ impl Monitor {
                         self.shared_state,
                         Utc::now().with_timezone(TIME_ZONE),
                         MonitorEventType::StopMonitor,
-                        "Monitor stopped.".to_string()
+                        "Monitor is stopping.".to_string()
                     );
                 }
                 false => {
@@ -175,6 +176,7 @@ impl Monitor {
         let ss_clone = Arc::clone(&shared_state);
 
         Self::set_panic_hook(ss_clone);
+
         smol::block_on(async {
             let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
 
@@ -184,155 +186,156 @@ impl Monitor {
                 .watch(Path::new(path), RecursiveMode::NonRecursive)
                 .unwrap();
 
-            'outer: loop {
-                let ss_clone = shared_state.clone();
+            let ss_clone = shared_state.clone();
 
-                let should_stop = smol::spawn(async move {
-                    loop {
-                        let is_should_stop = {
-                            let mut ss = ss_clone.lock().unwrap();
-                            ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.launch_time;
-                            ss.should_stop
-                        };
+            // set a future to check if should stop
+            let should_stop_future = async move {
+                loop {
+                    let is_should_stop = {
+                        let mut ss = ss_clone.lock().unwrap();
+                        ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.launch_time;
+                        ss.should_stop
+                    };
 
-                        if is_should_stop {
-                            let mut ss = ss_clone.lock().unwrap();
-                            ss.status = Stopped;
-                            ss.should_stop = false;
-                            break;
-                        }
-
-                        future::yield_now().await;
-                    }
-                    1
-                });
-
-                match rx.recv_timeout(Duration::from_millis(500)) {
-                    Ok(event) => {
-                        let event = event.unwrap();
-                        log!(
-                            shared_state.clone(),
-                            Utc::now().with_timezone(TIME_ZONE),
-                            MonitorEventType::ModifiedFile,
-                            format!("Notify event: {:?}, {:?}", event.kind, event.paths)
-                        );
-
-                        match event.kind {
-                            EventKind::Modify(_) => {
-                                let path = event.paths[0].clone();
-
-                                // update and get old file size
-                                let old_file_size = shared_state
-                                    .lock()
-                                    .unwrap()
-                                    .update_file_watchinfo(&path)
-                                    .unwrap_or_default()
-                                    .file_size;
-
-                                let current_file_size = shared_state
-                                    .lock()
-                                    .unwrap()
-                                    .file_statistic
-                                    .files_watched
-                                    .get(&path)
-                                    .unwrap()
-                                    .file_size;
-
-                                log!(
-                                    shared_state,
-                                    Utc::now().with_timezone(TIME_ZONE),
-                                    MonitorEventType::Info,
-                                    format!(
-                                        "File watched updated from {} bytes to {}",
-                                        old_file_size,
-                                        current_file_size
-                                    )
-                                );
-
-                                let ss_clone2 = shared_state.clone();
-
-                                let est = smol::spawn(async move {
-                                    'est: loop {
-                                        let (last_read_pos, file_size) = {
-                                            let ss = ss_clone2.lock().unwrap();
-
-                                            if let Some(info) =
-                                                ss.file_statistic.files_watched.get(&path).cloned()
-                                            {
-                                                (info.last_read_pos, info.file_size)
-                                            } else {
-                                                return 2;
-                                            }
-                                        };
-
-                                        if file_size > last_read_pos {
-                                            let mut paths_stream = Box::pin(
-                                                Self::extract_path_stream(&path, last_read_pos)
-                                                    .await,
-                                            );
-
-                                            while let Some((extracted_path, offset)) =
-                                                paths_stream.next().await
-                                            {
-                                                // update the offset read to.
-                                                ss_clone2.lock().unwrap().set_file_watchinfo(
-                                                    &path,
-                                                    FileWatchInfo {
-                                                        last_read_pos: offset,
-                                                        file_size,
-                                                    },
-                                                );
-
-                                                // if the monitor is stopped, break the loop.
-                                                if ss_clone2.lock().unwrap().status == Stopped {
-                                                    break 'est;
-                                                }
-                                                log!(
-                                                    ss_clone2,
-                                                    Utc::now().with_timezone(TIME_ZONE),
-                                                    MonitorEventType::Info,
-                                                    format!(
-                                                        "Path extracted: {} at offset {}",
-                                                        extracted_path.display(),
-                                                        offset
-                                                    )
-                                                );
-
-                                                // smol::Timer::after(Duration::from_secs(1)).await;
-
-                                                ss_clone2.lock().unwrap().add_file_got();
-                                            }
-                                        }
-                                    }
-                                    2
-                                });
-
-                                let result = smol::future::race(est, should_stop).await;
-
-                                if result == 1 {
-                                    break 'outer;
-                                }
-                            }
-                            EventKind::Create(_) => {
-                                let path = event.paths[0].clone();
-                            }
-                            _ => {}
-                        }
-                    }
-                    Err(mpsc::RecvTimeoutError::Timeout) => {
-                        continue;
-                    }
-                    Err(e) => {
-                        log!(
-                            shared_state,
-                            Utc::now().with_timezone(TIME_ZONE),
-                            MonitorEventType::Error,
-                            format!("Error: {:?}", e)
-                        );
+                    if is_should_stop {
+                        let mut ss = ss_clone.lock().unwrap();
+                        ss.status = Stopped;
+                        ss.should_stop = false;
                         break;
                     }
+                    future::yield_now().await;
                 }
-            }
+            };
+
+            let ss_clone2  = shared_state.clone();
+            let iterate_future = async move {
+                'outer: loop {
+                    match rx.recv_timeout(Duration::from_millis(500)) {
+                        Ok(Ok(NotifyEvent {
+                            kind: EventKind::Modify(ckind),
+                            paths,
+                            ..
+                        })) => {
+                            // log notify event
+                            log!(
+                                ss_clone2,
+                                Utc::now().with_timezone(TIME_ZONE),
+                                MonitorEventType::ModifiedFile,
+                                format!(
+                                    "Notify event: {:?}, {:?}",
+                                    EventKind::Modify(ckind),
+                                    paths
+                                )
+                            );
+
+                            let path = paths[0].clone();
+
+                            // update and get old file size
+                            let old_file_size = ss_clone2
+                                .lock()
+                                .unwrap()
+                                .update_file_watchinfo(&path)
+                                .unwrap_or_default()
+                                .file_size;
+
+                            let current_file_size = ss_clone2
+                                .lock()
+                                .unwrap()
+                                .file_statistic
+                                .files_watched
+                                .get(&path)
+                                .unwrap()
+                                .file_size;
+
+                            // log file's size changed
+                            log!(
+                                ss_clone2,
+                                Utc::now().with_timezone(TIME_ZONE),
+                                MonitorEventType::Info,
+                                format!(
+                                    "File watched updated from {} bytes to {}",
+                                    old_file_size, current_file_size
+                                )
+                            );
+
+                            // get file's size and last_read_pos
+                            let (last_read_pos, file_size) = {
+                                let ss = ss_clone2.lock().unwrap();
+
+                                if let Some(info) =
+                                    ss.file_statistic.files_watched.get(&path).cloned()
+                                {
+                                    (info.last_read_pos, info.file_size)
+                                } else {
+                                    return;
+                                }
+                            };
+
+                            // iterate the file's path strings
+                            if file_size > last_read_pos {
+                                let mut paths_stream =
+                                    Box::pin(Self::extract_path_stream(&path, last_read_pos).await);
+
+                                while let Some((extracted_path, offset)) = paths_stream.next().await
+                                {
+                                    // if the monitor is stopped, break the loop
+                                    if ss_clone2.lock().unwrap().status == Stopped {
+                                        break 'outer;
+                                    }
+
+                                    // update the offset read to
+                                    ss_clone2.lock().unwrap().set_file_watchinfo(
+                                        &path,
+                                        FileWatchInfo {
+                                            last_read_pos: offset,
+                                            file_size,
+                                        },
+                                    );
+
+                                    // do something with the extracted path
+                                    log!(
+                                        ss_clone2,
+                                        Utc::now().with_timezone(TIME_ZONE),
+                                        MonitorEventType::Info,
+                                        format!(
+                                            "Path extracted: {} at offset {}",
+                                            extracted_path.display(),
+                                            offset
+                                        )
+                                    );
+
+                                    smol::Timer::after(Duration::from_secs(1)).await;
+
+                                    ss_clone2.lock().unwrap().add_file_got();
+                                }
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            continue;
+                        }
+                        Err(e) => {
+                            log!(
+                                ss_clone2,
+                                Utc::now().with_timezone(TIME_ZONE),
+                                MonitorEventType::Error,
+                                format!("Error: {:?}", e)
+                            );
+                            break;
+                        }
+                    }
+                }
+            };
+
+            futures::join!(should_stop_future, iterate_future);
+        
+            log!(
+                shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                MonitorEventType::Info,
+                "Monitor stopped".to_string()
+            );  
+
             drop(watcher);
         });
         Ok(())
