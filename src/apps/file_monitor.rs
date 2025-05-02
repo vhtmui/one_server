@@ -194,7 +194,7 @@ impl FileMonitor {
 
 impl WidgetRef for FileMonitor {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let (left_area, midline, right_area) = dichotomize_area_with_midlines(
+        let (left_area, _midline, right_area) = dichotomize_area_with_midlines(
             area,
             Direction::Horizontal,
             Constraint::Percentage(30),
@@ -202,7 +202,7 @@ impl WidgetRef for FileMonitor {
             0,
         );
 
-        let (left_up_area, left_midline, left_down_area) = dichotomize_area_with_midlines(
+        let (left_up_area, _left_midline, left_down_area) = dichotomize_area_with_midlines(
             left_area,
             Direction::Vertical,
             Constraint::Percentage(30),
@@ -263,10 +263,10 @@ impl MyWidgets for FileMonitor {
                 } else {
                     match code {
                         KeyCode::Up => {
-                            self.log_list_state.borrow_mut().scroll_up_by(4);
+                            self.log_list_state.borrow_mut().scroll_up_by(1);
                         }
                         KeyCode::Down => {
-                            self.log_list_state.borrow_mut().scroll_down_by(4);
+                            self.log_list_state.borrow_mut().scroll_down_by(1);
                         }
                         _ => {}
                     }
