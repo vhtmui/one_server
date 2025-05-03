@@ -1,13 +1,16 @@
 use crate::log;
 
-use std::collections::HashMap;
-use std::panic;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, mpsc};
-use std::thread::{self};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    panic,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, mpsc},
+    thread,
+    time::Duration,
+};
 
-use chrono::{DateTime, FixedOffset, TimeDelta, Utc, offset};
+use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
+use futures;
 use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
 use smol::{
     fs,
@@ -16,7 +19,6 @@ use smol::{
     pin,
     stream::{self, StreamExt},
 };
-use futures;
 
 use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
 
@@ -34,7 +36,6 @@ pub struct SharedState {
     pub status: MonitorStatus,
     pub file_statistic: FileStatistics,
     pub logs: WrapList,
-    pub should_stop: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -51,7 +52,6 @@ pub struct FileStatistics {
     files_got: usize,
     files_recorded: usize,
     file_reading: PathBuf,
-    file_readlines: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -82,12 +82,11 @@ impl Monitor {
         let shared_state = Arc::new(Mutex::new(SharedState {
             launch_time: DateTime::from_timestamp(0, 0)
                 .unwrap()
-                .with_timezone(TIME_ZONE), // Updated to DateTime<FixedOffset>
+                .with_timezone(TIME_ZONE),
             elapsed_time: TimeDelta::zero(),
             status: Stopped,
             file_statistic: FileStatistics::default(),
             logs: WrapList::new(log_size),
-            should_stop: false,
         }));
 
         Monitor {
@@ -98,34 +97,35 @@ impl Monitor {
     }
 
     pub fn stop_monitor(&mut self) {
-        self.shared_state.lock().unwrap().should_stop = true;
-
+        self.shared_state
+            .lock()
+            .unwrap()
+            .set_status(MonitorStatus::Stopped);
         thread::sleep(Duration::from_millis(800));
 
         if let Some(handle) = self.handle.take() {
-            match handle.is_finished() {
-                true => {
-                    self.reset_time();
-                    log!(
-                        self.shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        MonitorEventType::StopMonitor,
-                        "Monitor is stopping.".to_string()
-                    );
-                }
-                false => {
-                    log!(
-                        self.shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        MonitorEventType::Error,
-                        "Monitor doesn't stop.".to_string()
-                    );
-                }
+            if handle.is_finished() {
+                self.reset_time();
+                log!(
+                    self.shared_state,
+                    Utc::now().with_timezone(TIME_ZONE),
+                    MonitorEventType::StopMonitor,
+                    "Monitor is stopping.".to_string()
+                );
+            } else {
+                log!(
+                    self.shared_state,
+                    Utc::now().with_timezone(TIME_ZONE),
+                    MonitorEventType::Error,
+                    "Monitor doesn't stop.".to_string()
+                );
             }
         }
     }
+
     pub fn start_monitor(&mut self) -> Result<()> {
-        if self.shared_state.lock().unwrap().status == Running {
+        let ss = self.shared_state.lock().unwrap();
+        if ss.status == Running {
             log!(
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
@@ -134,11 +134,10 @@ impl Monitor {
             );
             return Ok(());
         }
+        drop(ss);
 
-        let path = self.path.clone();
-        if !Path::new(&path).exists() {
+        if !Path::new(&self.path).exists() {
             let current_path = std::env::current_dir()?;
-
             log!(
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
@@ -158,6 +157,7 @@ impl Monitor {
         self.shared_state.lock().unwrap().launch_time = time;
 
         let cloned_shared_state = Arc::clone(&self.shared_state);
+        let path = self.path.clone();
         let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, &path));
 
         self.handle = Some(handle);
@@ -174,40 +174,31 @@ impl Monitor {
     /// function run in a thread
     fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: &str) -> Result<()> {
         let ss_clone = Arc::clone(&shared_state);
-
         Self::set_panic_hook(ss_clone);
 
         smol::block_on(async {
             let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
-
             let mut watcher = notify::recommended_watcher(tx).unwrap();
-
             watcher
                 .watch(Path::new(path), RecursiveMode::NonRecursive)
                 .unwrap();
 
             let ss_clone = shared_state.clone();
-
-            // set a future to check if should stop
             let should_stop_future = async move {
                 loop {
-                    let is_should_stop = {
+                    let should_stop = {
                         let mut ss = ss_clone.lock().unwrap();
                         ss.elapsed_time = Utc::now().with_timezone(TIME_ZONE) - ss.launch_time;
-                        ss.should_stop
+                        ss.get_status()
                     };
-
-                    if is_should_stop {
-                        let mut ss = ss_clone.lock().unwrap();
-                        ss.status = Stopped;
-                        ss.should_stop = false;
+                    if should_stop == Stopped {
                         break;
                     }
                     future::yield_now().await;
                 }
             };
 
-            let ss_clone2  = shared_state.clone();
+            let ss_clone2 = shared_state.clone();
             let iterate_future = async move {
                 'outer: loop {
                     match rx.recv_timeout(Duration::from_millis(500)) {
@@ -216,7 +207,6 @@ impl Monitor {
                             paths,
                             ..
                         })) => {
-                            // log notify event
                             log!(
                                 ss_clone2,
                                 Utc::now().with_timezone(TIME_ZONE),
@@ -247,7 +237,6 @@ impl Monitor {
                                 .unwrap()
                                 .file_size;
 
-                            // log file's size changed
                             log!(
                                 ss_clone2,
                                 Utc::now().with_timezone(TIME_ZONE),
@@ -261,59 +250,60 @@ impl Monitor {
                             // get file's size and last_read_pos
                             let (last_read_pos, file_size) = {
                                 let ss = ss_clone2.lock().unwrap();
-
-                                if let Some(info) =
-                                    ss.file_statistic.files_watched.get(&path).cloned()
-                                {
-                                    (info.last_read_pos, info.file_size)
-                                } else {
-                                    return;
-                                }
+                                ss.file_statistic
+                                    .files_watched
+                                    .get(&path)
+                                    .cloned()
+                                    .map(|info| (info.last_read_pos, info.file_size))
+                                    .unwrap_or((0, 0))
                             };
+
+                            // if the monitor is stopped, break the loop
+                            if ss_clone2.lock().unwrap().status == Stopped {
+                                break 'outer;
+                            }
 
                             // iterate the file's path strings
                             if file_size > last_read_pos {
-                                let mut paths_stream =
+                                let paths_stream =
                                     Box::pin(Self::extract_path_stream(&path, last_read_pos).await);
 
-                                while let Some((extracted_path, offset)) = paths_stream.next().await
-                                {
-                                    // if the monitor is stopped, break the loop
-                                    if ss_clone2.lock().unwrap().status == Stopped {
-                                        break 'outer;
-                                    }
+                                ss_clone2.lock().unwrap().set_files_reading(&path);
+                                // collect the paths
+                                let paths: Vec<(PathBuf, u64)> = paths_stream.collect().await;
 
-                                    // update the offset read to
-                                    ss_clone2.lock().unwrap().set_file_watchinfo(
+                                // the offset is the file's size
+                                let offset = file_size;
+                                let last_offset = ss_clone2
+                                    .lock()
+                                    .unwrap()
+                                    .set_file_watchinfo(
                                         &path,
                                         FileWatchInfo {
                                             last_read_pos: offset,
                                             file_size,
                                         },
-                                    );
+                                    )
+                                    .unwrap_or(FileWatchInfo {
+                                        last_read_pos: 0,
+                                        file_size: 0,
+                                    })
+                                    .last_read_pos;
 
-                                    // do something with the extracted path
-                                    log!(
-                                        ss_clone2,
-                                        Utc::now().with_timezone(TIME_ZONE),
-                                        MonitorEventType::Info,
-                                        format!(
-                                            "Path extracted: {} at offset {}",
-                                            extracted_path.display(),
-                                            offset
-                                        )
-                                    );
+                                let bytes_read = offset - last_offset;
 
-                                    smol::Timer::after(Duration::from_secs(1)).await;
+                                log!(
+                                    ss_clone2,
+                                    Utc::now().with_timezone(TIME_ZONE),
+                                    MonitorEventType::ModifiedFile,
+                                    format!("Read {} bytes from file {:?}", bytes_read, path)
+                                );
 
-                                    ss_clone2.lock().unwrap().add_file_got();
-                                }
+                                ss_clone2.lock().unwrap().add_file_got(paths.len());
                             }
                         }
                         Ok(_) => {}
-                        Err(mpsc::RecvTimeoutError::Timeout) => {
-                            continue;
-                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
                         Err(e) => {
                             log!(
                                 ss_clone2,
@@ -328,13 +318,13 @@ impl Monitor {
             };
 
             futures::join!(should_stop_future, iterate_future);
-        
+
             log!(
                 shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
                 MonitorEventType::Info,
                 "Monitor stopped".to_string()
-            );  
+            );
 
             drop(watcher);
         });
@@ -412,8 +402,12 @@ impl Monitor {
         ss.elapsed_time = TimeDelta::zero();
     }
 
+    pub fn set_status(&self, status: MonitorStatus) {
+        self.shared_state.lock().unwrap().set_status(status);
+    }
+
     pub fn get_status(&self) -> MonitorStatus {
-        self.shared_state.lock().unwrap().status.clone()
+        self.shared_state.lock().unwrap().get_status()
     }
 
     pub fn files_got(&self) -> usize {
@@ -429,24 +423,12 @@ impl Monitor {
             .clone()
     }
 
-    pub fn get_file_readlines(&self) -> usize {
-        self.shared_state
-            .lock()
-            .unwrap()
-            .file_statistic
-            .file_readlines
-    }
-
-    pub fn get_files_recorded(&self) -> usize {
+    pub fn files_recorded(&self) -> usize {
         self.shared_state
             .lock()
             .unwrap()
             .file_statistic
             .files_recorded
-    }
-
-    pub fn set_status(&self, status: MonitorStatus) {
-        self.shared_state.lock().unwrap().status = status;
     }
 
     fn set_panic_hook(shared_state: Arc<Mutex<SharedState>>) {
@@ -457,8 +439,8 @@ impl Monitor {
                 MonitorEventType::Error,
                 format!("Thread panicked: {:?}", panic_info)
             );
-            shared_state.lock().unwrap().status = Stopped;
-            shared_state.lock().unwrap().should_stop = false;
+            let mut ss = shared_state.lock().unwrap();
+            ss.status = Stopped;
         }));
     }
 }
@@ -489,12 +471,24 @@ impl SharedState {
             .insert(path.clone(), file_watch_info.clone())
     }
 
-    fn set_file_watchinfo(&mut self, path: &PathBuf, info: FileWatchInfo) {
-        self.file_statistic.files_watched.insert(path.clone(), info);
+    fn set_file_watchinfo(&mut self, path: &PathBuf, info: FileWatchInfo) -> Option<FileWatchInfo> {
+        self.file_statistic.files_watched.insert(path.clone(), info)
     }
 
-    fn add_file_got(&mut self) {
-        self.file_statistic.files_got += 1;
+    fn add_file_got(&mut self, num: usize) {
+        self.file_statistic.files_got += num;
+    }
+
+    fn get_status(&self) -> MonitorStatus {
+        self.status.clone()
+    }
+
+    fn set_status(&mut self, status: MonitorStatus) {
+        self.status = status;
+    }
+
+    fn set_files_reading(&mut self, path: &PathBuf) {
+        self.file_statistic.file_reading = path.clone();
     }
 }
 

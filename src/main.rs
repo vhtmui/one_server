@@ -15,12 +15,15 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path: Cfg =
-        serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
+    let path: Cfg = serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
 
     let file_monitor = (
         String::from("file_monitor"),
-        Box::new(FileMonitor::new("file_monitor".to_string(), path.file_monitor_path, 50)),
+        Box::new(FileMonitor::new(
+            "file_monitor".to_string(),
+            path.file_monitor_path,
+            50,
+        )),
     );
 
     add_widgets!(app, file_monitor)
