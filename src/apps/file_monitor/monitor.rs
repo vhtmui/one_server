@@ -1,4 +1,4 @@
-use crate::log;
+use crate::{Config, apps::file_monitor::maintainer, log};
 
 use std::{
     collections::HashMap,
@@ -19,13 +19,14 @@ use smol::{
     pin,
     stream::{self, StreamExt},
 };
+use walkdir::WalkDir;
 
 use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
 
 const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
 pub struct Monitor {
-    pub path: String,
+    pub path: PathBuf,
     pub shared_state: Arc<Mutex<SharedState>>,
     pub handle: Option<thread::JoinHandle<Result<()>>>,
 }
@@ -78,7 +79,7 @@ pub enum MonitorEventType {
 }
 
 impl Monitor {
-    pub fn new(path: String, log_size: usize) -> Self {
+    pub fn new(path: PathBuf, log_size: usize) -> Self {
         let shared_state = Arc::new(Mutex::new(SharedState {
             launch_time: DateTime::from_timestamp(0, 0)
                 .unwrap()
@@ -94,6 +95,23 @@ impl Monitor {
             shared_state,
             handle: None,
         }
+    }
+
+    pub async fn scan_and_update_dir(dir: &Path) -> std::io::Result<()> {
+        use crate::apps::file_monitor::maintainer;
+
+        // 递归收集所有文件路径
+        let files: Vec<PathBuf> = WalkDir::new(dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.path().to_path_buf())
+            .collect();
+
+        // 调用数据库更新
+        maintainer::process_paths(files).await.map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::Other, format!("DB update error: {}", e))
+        })
     }
 
     pub fn stop_monitor(&mut self) {
@@ -158,7 +176,7 @@ impl Monitor {
 
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let path = self.path.clone();
-        let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, &path));
+        let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, path));
 
         self.handle = Some(handle);
 
@@ -172,16 +190,14 @@ impl Monitor {
     }
 
     /// function run in a thread
-    fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: &str) -> Result<()> {
+    fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: PathBuf) -> Result<()> {
         let ss_clone = Arc::clone(&shared_state);
         Self::set_panic_hook(ss_clone);
 
         smol::block_on(async {
             let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
             let mut watcher = notify::recommended_watcher(tx).unwrap();
-            watcher
-                .watch(Path::new(path), RecursiveMode::NonRecursive)
-                .unwrap();
+            watcher.watch(&path, RecursiveMode::NonRecursive).unwrap();
 
             let ss_clone = shared_state.clone();
             let should_stop_future = async move {
@@ -270,7 +286,12 @@ impl Monitor {
 
                                 ss_clone2.lock().unwrap().set_files_reading(&path);
                                 // collect the paths
-                                let paths: Vec<(PathBuf, u64)> = paths_stream.collect().await;
+                                let paths_and_offset: Vec<(PathBuf, u64)> =
+                                    paths_stream.collect().await;
+
+                                let paths: Vec<PathBuf> =
+                                    paths_and_offset.iter().map(|f| f.0.clone()).collect();
+                                maintainer::process_paths(paths).await.unwrap();
 
                                 // the offset is the file's size
                                 let offset = file_size;
@@ -299,7 +320,10 @@ impl Monitor {
                                     format!("Read {} bytes from file {:?}", bytes_read, path)
                                 );
 
-                                ss_clone2.lock().unwrap().add_file_got(paths.len());
+                                ss_clone2
+                                    .lock()
+                                    .unwrap()
+                                    .add_file_got(paths_and_offset.len());
                             }
                         }
                         Ok(_) => {}
@@ -353,7 +377,7 @@ impl Monitor {
                                 let path_str =
                                     line.split(words[4]).collect::<Vec<&str>>()[1].trim();
                                 return Some((
-                                    (PathBuf::from(path_str), new_offset),
+                                    (Self::handle_pathstring(path_str).await, new_offset),
                                     (reader, new_offset),
                                 ));
                             } else {
@@ -369,6 +393,33 @@ impl Monitor {
                 }
             },
         )
+    }
+
+    async fn handle_pathstring(path: &str) -> PathBuf {
+        // 读取配置
+        let cfg_path = PathBuf::from("asset/cfg.json");
+        let cfg_str = fs::read_to_string(&cfg_path)
+            .await
+            .expect("Failed to read cfg.json");
+        let config: Config = serde_json::from_str(&cfg_str).expect("Invalid cfg.json format");
+        let prefix_map = &config.file_monitor.prefix_map_of_extract_path;
+
+        // 遍历所有映射，优先非"default"
+        for (_key, pair) in prefix_map.iter().filter(|(k, _)| *k != "default") {
+            let (from, to) = (&pair[0], &pair[1]);
+            if path.starts_with(from) && !from.is_empty() {
+                let replaced = format!("{}{}", to, path.trim_start_matches(from));
+                return PathBuf::from(replaced);
+            }
+        }
+        // 没有匹配到则用"default"
+        if let Some(pair) = prefix_map.get("default") {
+            let (from, to) = (&pair[0], &pair[1]);
+            let replaced = format!("{}{}", to, path.trim_start_matches(from));
+            return PathBuf::from(replaced);
+        }
+        // 没有default则原样返回
+        PathBuf::from(path)
     }
 
     pub fn set_lunch_time(&self) {
@@ -501,4 +552,31 @@ macro_rules! log {
             message: $message,
         })
     };
+}
+
+#[tokio::test]
+async fn test_path_construction() {
+    let path_str = "/QT-8100HP/TEST-143/AA17_AiP405rt.csv";
+    let path = Monitor::handle_pathstring(path_str).await;
+
+    let path_str2 = "/AC03/ASDFDSAFDSA.csv";
+    let path2 = Monitor::handle_pathstring(path_str2).await;
+    assert_eq!(PathBuf::from("E:\\testdata\\AC03\\ASDFDSAFDSA.csv"), path2);
+    assert_eq!(
+        PathBuf::from("E:\\testdata\\QT-8100HP\\TEST-143\\AA17_AiP405rt.csv"),
+        path
+    );
+}
+
+#[test]
+fn test_file_path() {
+    let path = PathBuf::from("\\asset\\cfg.json");
+    if !std::fs::exists(&path).unwrap() {
+        eprintln!(
+            "File does not exist, current path is {}, and your path is {}",
+            std::env::current_dir().unwrap().display(),
+            path.display()
+        );
+        panic!();
+    }
 }

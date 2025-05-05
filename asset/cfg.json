@@ -1,3 +1,15 @@
 {
-    "file_monitor_path": "D:\\my_git\\asset"
+    "file_monitor": {
+        "monitor_path": "asset",
+        "prefix_map_of_extract_path": {
+            "ac03": [
+                "\\AC03",
+                "E:\\CusData\\AC03"
+            ],
+            "default": [
+                "\\",
+                "E:\\testdata\\"
+            ]
+        }
+    }
 }

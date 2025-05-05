@@ -1,9 +1,10 @@
-mod monitor;
-mod maintainer;
+pub mod monitor;
+pub mod maintainer;
 
 pub use monitor::*;
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::vec;
 
 use hyphenation::{Language, Load, Standard};
@@ -69,7 +70,7 @@ pub struct FileMonitor {
 }
 
 impl FileMonitor {
-    pub fn new(title: String, path: String, log_size: usize) -> Self {
+    pub fn new(title: String, path: PathBuf, log_size: usize) -> Self {
         let menu_struct = serde_json::from_str(MENU_JSON).unwrap();
         FileMonitor {
             menu_state: RefCell::new(MenuState::default()),
@@ -272,3 +273,4 @@ impl MyWidgets for FileMonitor {
         Ok(Default)
     }
 }
+

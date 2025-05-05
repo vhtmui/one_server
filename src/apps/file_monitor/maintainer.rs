@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveTime, Utc};
-use mysql_async::prelude::*;
-use mysql_async::{Conn, Pool};
+use mysql_async::{Conn, Opts, Pool};
+use mysql_async::{OptsBuilder, prelude::*};
+use std::env;
+use std::fmt::Debug;
 use std::fs;
 use std::io::Error;
 use std::path::PathBuf;
@@ -45,14 +47,12 @@ impl FileInfo {
     }
 }
 
-// 数据库操作模块
 mod db {
     use super::*;
 
     pub async fn init_pool() -> Pool {
-        // TODO: 配置数据库连接参数
-        let url = "mysql://user:password@localhost:3306/dbname";
-        Pool::new(url)
+        let url = env::var("DB_URL").expect("DB_URL must be set");
+        Pool::new(url.as_str())
     }
 
     /// 批量插入文件信息，存在则更新time_last_written和file_size
@@ -61,7 +61,7 @@ mod db {
             return Ok(());
         }
         let mut sql = String::from(
-            "INSERT INTO testdata.file_info (file_path, file_name, time_created, time_last_written, file_size, parent_directory) VALUES "
+            "INSERT INTO testdata.file_info (file_path, file_name, time_created, time_last_written, file_size, parent_directory) VALUES ",
         );
         let mut params = Vec::new();
         for (i, info) in infos.iter().enumerate() {
@@ -81,16 +81,28 @@ mod db {
     }
 }
 
-/// 处理文件路径列表，收集信息并插入数据库
+/// Example:
+/// ```
+/// process_paths(vec![PathBuf::from("/path/to/file1"), PathBuf::from("/path/to/file2")])
+/// ```
 pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
     let pool = db::init_pool().await;
     let mut file_infos = Vec::new();
+    let current_path = std::env::current_dir()?;
 
     for path in paths {
         if let Ok(info) = FileInfo::from_path(&path) {
             file_infos.push(info);
         } else {
-            eprintln!("Failed to read file metadata for {:?}", path);
+            eprintln!();
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to read file metadata for {:?}, current path is {}",
+                    path,
+                    current_path.display(),
+                ),
+            ));
         }
     }
 
@@ -109,17 +121,35 @@ pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
                 ));
             }
         };
-        smol::spawn(async move {
-            if let Err(e) = db::insert_file_infos(&mut conn, &batch).await {
-                return Err(Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to insert file info with {}", e),
-                ));
-            }
-            Ok(())
-        })
-        .detach();
+        if let Err(e) = db::insert_file_infos(&mut conn, &batch).await {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to insert file info with {}", e),
+            ));
+        }
         idx = end;
     }
     Ok(())
+}
+
+#[test]
+fn test_mysql_url() {
+    let url = "mysql://q:1234.Com@10.50.3.70:3306/testdata";
+    let opts = Opts::from_url(url).unwrap();
+}
+
+#[tokio::test]
+async fn insert_file_info() {
+    let base = std::env::temp_dir().join("test_asset");
+    std::fs::create_dir_all(&base).unwrap();
+    let mut paths = Vec::new();
+    for i in 0..3 {
+        let file = base.join(format!("file{}", i));
+        std::fs::write(&file, b"test").unwrap();
+        paths.push(file);
+    }
+
+    process_paths(paths).await.unwrap();
+
+    std::fs::remove_dir_all(&base).unwrap();
 }

@@ -7,6 +7,7 @@ use std::fs;
 use one_server::{
     add_widgets,
     apps::{Apps, file_monitor::FileMonitor},
+    Config,
 };
 
 #[apply(main!)]
@@ -15,13 +16,13 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path: Cfg = serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
+    let path: Config = serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
 
     let file_monitor = (
         String::from("file_monitor"),
         Box::new(FileMonitor::new(
             "file_monitor".to_string(),
-            path.file_monitor_path,
+            path.file_monitor.monitor_path,
             50,
         )),
     );
@@ -34,5 +35,5 @@ async fn main() {
 
 #[derive(Deserialize, Debug)]
 struct Cfg {
-    file_monitor_path: String,
+    file_monitor: String,
 }
