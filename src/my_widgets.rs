@@ -1,7 +1,10 @@
 use ratatui::{
+    Frame,
+    buffer::Buffer,
     crossterm::event::KeyCode,
-    layout::{Constraint, Direction, Layout, Rect},
-    widgets::WidgetRef,
+    layout::{Constraint, Direction, Flex, Layout, Rect},
+    text::Text,
+    widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
 };
 
 use crate::apps::AppAction;
@@ -50,4 +53,19 @@ pub fn dichotomize_area_with_midlines(
         .split(area);
 
     (chunks[0], chunks[1], chunks[2])
+}
+
+pub fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+    let [area] = Layout::horizontal([horizontal])
+        .flex(Flex::Center)
+        .areas(area);
+    let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+    area
+}
+
+pub fn render_input_popup<'a>(content: &'a str, area: Rect, buf: &mut Buffer) {
+    let area = center(area, Constraint::Percentage(50), Constraint::Length(3));
+    let popup = Paragraph::new(content).block(Block::bordered().title("Popup"));
+    Clear.render(area, buf);
+    popup.render(area, buf);
 }

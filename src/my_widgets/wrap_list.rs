@@ -41,7 +41,8 @@ impl WrapList {
             MonitorEventType::ModifiedFile => ("[MODIFY]", Color::Blue),
             MonitorEventType::DeletedFile => ("[DELETE]", Color::Magenta),
             MonitorEventType::StopMonitor => ("[STOP]", Color::Yellow),
-            MonitorEventType::Info => ("[INFO]  ", Color::White),
+            MonitorEventType::Info => ("[INFO]  ", Color::Magenta),
+            MonitorEventType::Scanner => ("[SCAN]  ", Color::Cyan),
         };
 
         let time_str = e

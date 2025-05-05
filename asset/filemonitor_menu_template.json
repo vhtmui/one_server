@@ -17,6 +17,23 @@
                     "children": []
                 }
             ]
+        },
+        {
+            "name": "scanner",
+            "content": "This is a description of scanner.",
+            "children": [
+                {
+                    "name": "start",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+                },
+                {
+                    "name": "stop(Developing)",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+
+                }
+            ]
         }
     ]
 }

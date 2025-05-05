@@ -1,5 +1,5 @@
-pub mod monitor;
 pub mod maintainer;
+pub mod monitor;
 
 pub use monitor::*;
 
@@ -20,7 +20,7 @@ use ratatui::{
 };
 use textwrap::{Options, WordSplitter, fill};
 
-use crate::my_widgets::menu;
+use crate::my_widgets::{self, menu, render_input_popup};
 use crate::{
     apps::{
         AppAction::{self, *},
@@ -55,10 +55,49 @@ const MENU_JSON: &str = r#"
                     "children": []
                 }
             ]
+        },
+        {
+            "name": "scanner",
+            "content": "This is a description of scanner.",
+            "children": [
+                {
+                    "name": "start",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+                },
+                {
+                    "name": "stop(Developing)",
+                    "content": "This is a description of Skyrim.",
+                    "children": []
+
+                }
+            ]
         }
     ]
 }
 "#;
+
+#[derive(Debug, PartialEq, Eq)]
+enum CurrentArea {
+    LogArea,
+    ControlPanelArea,
+    StatusArea,
+    InputArea,
+}
+
+impl CurrentArea {
+    fn toggle(&mut self) {
+        match self {
+            CurrentArea::LogArea => *self = CurrentArea::ControlPanelArea,
+            CurrentArea::ControlPanelArea => *self = CurrentArea::LogArea,
+            _ => {}
+        }
+    }
+
+    fn set_current_area(&mut self, area: CurrentArea) {
+        *self = area;
+    }
+}
 
 pub struct FileMonitor {
     title: String,
@@ -66,7 +105,8 @@ pub struct FileMonitor {
     menu_state: RefCell<MenuState>,
     monitor: Monitor,
     log_list_state: RefCell<ListState>,
-    current_area: bool,
+    input_content: String,
+    current_area: CurrentArea,
 }
 
 impl FileMonitor {
@@ -78,7 +118,8 @@ impl FileMonitor {
             menu_struct,
             monitor: Monitor::new(path, log_size),
             log_list_state: RefCell::new(ListState::default()),
-            current_area: true,
+            current_area: CurrentArea::ControlPanelArea,
+            input_content: String::new(),
         }
     }
 
@@ -103,15 +144,19 @@ impl FileMonitor {
     }
 
     pub fn toggle_area(&mut self) {
-        self.current_area = !self.current_area;
+        self.current_area.toggle();
     }
 
-    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer, highlight: bool) {
+    pub fn set_current_area(&mut self, area: CurrentArea) {
+        self.current_area.set_current_area(area);
+    }
+
+    pub fn render_control_panel(&self, area: Rect, buf: &mut Buffer, if_highlight: bool) {
         let mut state = self.menu_state.borrow_mut();
 
         if let Ok(menu_item) = MenuItem::from_json(MENU_JSON) {
             let block = Block::default()
-                .borders(if highlight {
+                .borders(if if_highlight {
                     Borders::ALL
                 } else {
                     Borders::NONE
@@ -159,9 +204,9 @@ impl FileMonitor {
         Paragraph::new(text).block(block).render_ref(area, buf);
     }
 
-    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer, highlight: bool) {
+    pub fn render_log_area(&self, area: Rect, buf: &mut Buffer, if_highlight: bool) {
         let block = Block::default()
-            .borders(if highlight {
+            .borders(if if_highlight {
                 Borders::ALL
             } else {
                 Borders::NONE
@@ -206,9 +251,17 @@ impl WidgetRef for FileMonitor {
             0,
         );
 
-        self.render_control_panel(left_up_area, buf, self.current_area);
+        self.render_control_panel(
+            left_up_area,
+            buf,
+            self.current_area == CurrentArea::ControlPanelArea,
+        );
         self.render_status_area(left_down_area, buf);
-        self.render_log_area(right_area, buf, !self.current_area);
+        self.render_log_area(right_area, buf, self.current_area == CurrentArea::LogArea);
+
+        if self.current_area == CurrentArea::InputArea {
+            render_input_popup(&self.input_content, area, buf);
+        }
     }
 }
 
@@ -223,8 +276,8 @@ impl MyWidgets for FileMonitor {
             }
             code => {
                 // if in menu area
-                if self.current_area {
-                    match code {
+                match self.current_area {
+                    CurrentArea::ControlPanelArea => match code {
                         KeyCode::Enter => {
                             if !self.menu_state.borrow().selected_indices.is_empty() {
                                 match self.get_menu_result().as_str() {
@@ -236,6 +289,11 @@ impl MyWidgets for FileMonitor {
                                     "monitor-stop" => {
                                         if self.monitor.get_status() != Stopped {
                                             self.monitor.stop_monitor();
+                                        }
+                                    }
+                                    "scanner-start" => {
+                                        if self.monitor.get_scanner_status() != "Running" {
+                                            self.set_current_area(CurrentArea::InputArea);
                                         }
                                     }
                                     _ => {}
@@ -255,9 +313,8 @@ impl MyWidgets for FileMonitor {
                             self.menu_state.borrow_mut().select_right();
                         }
                         _ => {}
-                    }
-                } else {
-                    match code {
+                    },
+                    CurrentArea::LogArea => match code {
                         KeyCode::Up => {
                             self.log_list_state.borrow_mut().scroll_up_by(1);
                         }
@@ -265,7 +322,27 @@ impl MyWidgets for FileMonitor {
                             self.log_list_state.borrow_mut().scroll_down_by(1);
                         }
                         _ => {}
+                    },
+                    CurrentArea::InputArea => {
+                        match code {
+                            KeyCode::Char(c) => {
+                                self.input_content.push(c);
+                            }
+                            KeyCode::Backspace => {
+                                self.input_content.pop();
+                            }
+                            KeyCode::Enter => {
+                                self.monitor.start_scanner(PathBuf::from(self.input_content.clone()))?;
+                                self.set_current_area(CurrentArea::LogArea);
+                            }
+                            KeyCode::Esc => {
+                                self.set_current_area(CurrentArea::LogArea);
+                            }
+                            _ => {
+                            }
+                        }
                     }
+                    _ => {}
                 }
             }
         }
@@ -273,4 +350,3 @@ impl MyWidgets for FileMonitor {
         Ok(Default)
     }
 }
-

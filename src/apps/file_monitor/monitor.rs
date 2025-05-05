@@ -37,6 +37,7 @@ pub struct SharedState {
     pub status: MonitorStatus,
     pub file_statistic: FileStatistics,
     pub logs: WrapList,
+    pub scanner_status: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -76,6 +77,7 @@ pub enum MonitorEventType {
     ModifiedFile,
     DeletedFile,
     Info,
+    Scanner,
 }
 
 impl Monitor {
@@ -88,6 +90,7 @@ impl Monitor {
             status: Stopped,
             file_statistic: FileStatistics::default(),
             logs: WrapList::new(log_size),
+            scanner_status: "".to_string(),
         }));
 
         Monitor {
@@ -97,9 +100,50 @@ impl Monitor {
         }
     }
 
-    pub async fn scan_and_update_dir(dir: &Path) -> std::io::Result<()> {
-        use crate::apps::file_monitor::maintainer;
+    pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
+        let shared_state = self.shared_state.clone();
+        shared_state.lock().unwrap().scanner_status = "Running...".to_string();
 
+        let ss_clone = shared_state.clone();
+        Self::set_panic_hook(ss_clone);
+
+        let ss_clone2 = shared_state.clone();
+        let handle = thread::spawn(move || {
+            let _ = Monitor::scan_and_update_dir(ss_clone2, &path);
+        });
+
+        log!(
+            shared_state,
+            Utc::now().with_timezone(TIME_ZONE),
+            MonitorEventType::Scanner,
+            "Scaner started".to_string()
+        );
+
+        let future = async move {
+            loop {
+                if handle.is_finished() {
+                    shared_state.lock().unwrap().scanner_status = "Finished".to_string();
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        MonitorEventType::Scanner,
+                        "Scanner finished".to_string()
+                    );
+                    break;
+                }
+
+                smol::future::yield_now().await;
+            }
+        };
+
+        smol::spawn(future).detach();
+        Ok(())
+    }
+
+    pub async fn scan_and_update_dir(
+        shared_state: Arc<Mutex<SharedState>>,
+        dir: &Path,
+    ) -> std::io::Result<()> {
         // 递归收集所有文件路径
         let files: Vec<PathBuf> = WalkDir::new(dir)
             .into_iter()
@@ -108,10 +152,28 @@ impl Monitor {
             .map(|e| e.path().to_path_buf())
             .collect();
 
+        log!(
+            shared_state,
+            Utc::now().with_timezone(TIME_ZONE),
+            MonitorEventType::Scanner,
+            format!(
+                "Found {} files in the directory. Executing insert...",
+                files.len()
+            )
+        );
+
         // 调用数据库更新
         maintainer::process_paths(files).await.map_err(|e| {
             std::io::Error::new(std::io::ErrorKind::Other, format!("DB update error: {}", e))
-        })
+        })?;
+
+        log!(
+            shared_state,
+            Utc::now().with_timezone(TIME_ZONE),
+            MonitorEventType::Scanner,
+            "DB update finished.".to_string()
+        );
+        Ok(())
     }
 
     pub fn stop_monitor(&mut self) {
@@ -189,7 +251,7 @@ impl Monitor {
         Ok(())
     }
 
-    /// function run in a thread
+    // 线程中运行
     fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: PathBuf) -> Result<()> {
         let ss_clone = Arc::clone(&shared_state);
         Self::set_panic_hook(ss_clone);
@@ -459,6 +521,10 @@ impl Monitor {
 
     pub fn get_status(&self) -> MonitorStatus {
         self.shared_state.lock().unwrap().get_status()
+    }
+
+    pub fn get_scanner_status(&self) -> String {
+        self.shared_state.lock().unwrap().scanner_status.clone()
     }
 
     pub fn files_got(&self) -> usize {

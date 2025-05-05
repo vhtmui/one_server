@@ -135,21 +135,24 @@ pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
 #[test]
 fn test_mysql_url() {
     let url = "mysql://q:1234.Com@10.50.3.70:3306/testdata";
-    let opts = Opts::from_url(url).unwrap();
+    let _opts = Opts::from_url(url).unwrap();
 }
 
-#[tokio::test]
-async fn insert_file_info() {
-    let base = std::env::temp_dir().join("test_asset");
-    std::fs::create_dir_all(&base).unwrap();
-    let mut paths = Vec::new();
-    for i in 0..3 {
-        let file = base.join(format!("file{}", i));
-        std::fs::write(&file, b"test").unwrap();
-        paths.push(file);
-    }
+#[test]
+fn insert_file_info() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let base = std::env::temp_dir().join("test_asset");
+        std::fs::create_dir_all(&base).unwrap();
+        let mut paths = Vec::new();
+        for i in 0..3 {
+            let file = base.join(format!("file{}", i));
+            std::fs::write(&file, b"test").unwrap();
+            paths.push(file);
+        }
 
-    process_paths(paths).await.unwrap();
+        process_paths(paths).await.unwrap();
 
-    std::fs::remove_dir_all(&base).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
+    });
 }
