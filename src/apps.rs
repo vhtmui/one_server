@@ -70,21 +70,27 @@ impl Apps {
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
                 .unwrap();
 
-            if poll(Duration::from_millis(100))? {
-                let mut events = Vec::new();
+            if poll(Duration::from_millis(0))? {
+                // 渲染计算量过大时限制操作频率。实际应优先优化计算缓存
+                // let mut events = Vec::new();
 
-                while poll(Duration::ZERO)? {
-                    events.push(read()?);
-                }
+                // while poll(Duration::ZERO)? {
+                //     events.push(read()?);
+                // }
 
-                let mut events_iter = events.iter();
+                // let mut events_iter = events.iter();
 
-                for _ in 1..=2 {
-                    if let Some(event) = events_iter.next() {
-                        if let Ok(ExitProgress) = self.handle_event(event.clone()) {
-                            break 'app;
-                        }
-                    }
+                // for _ in 1..=2 {
+                //     if let Some(event) = events_iter.next() {
+                //         if let Ok(ExitProgress) = self.handle_event(event.clone()) {
+                //             break 'app;
+                //         }
+                //     }
+                // }
+                let event = read()?;
+
+                if let Ok(ExitProgress) = self.handle_event(event.clone()) {
+                    break 'app;
                 }
             }
         }

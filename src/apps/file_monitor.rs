@@ -382,15 +382,15 @@ impl MyWidgets for FileMonitor {
                 _ => {}
             },
             CurrentArea::InputArea => match event {
+                Event::Paste(s) => {
+                    self.input_content.push_str(&s);
+                }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char(c),
                     kind: KeyEventKind::Press,
                     ..
                 }) => {
                     self.input_content.push(c);
-                }
-                Event::Paste(s) => {
-                    self.input_content.push_str(&s);
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Backspace,
