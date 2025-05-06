@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveTime, Utc};
+use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
 use mysql_async::{Conn, Opts, Pool};
 use mysql_async::{OptsBuilder, prelude::*};
 use std::env;
@@ -7,12 +7,14 @@ use std::fs;
 use std::io::Error;
 use std::path::PathBuf;
 
+use super::monitor::TIME_ZONE;
+
 #[derive(Debug, Clone)]
 struct FileInfo {
     path: String,
     filename: String,
-    created_at: DateTime<Utc>,
-    modified_at: DateTime<Utc>,
+    created_at: DateTime<FixedOffset>,
+    modified_at: DateTime<FixedOffset>,
     size: u64,
     parent_path: Option<String>,
 }
@@ -21,14 +23,20 @@ impl FileInfo {
     /// 从PathBuf构造FileInfo
     fn from_path(path: &PathBuf) -> std::io::Result<Self> {
         let metadata = fs::metadata(path)?;
-        let created: DateTime<Utc> = metadata
+        let created = metadata
             .created()
-            .map(|t| t.into())
-            .unwrap_or_else(|_| DateTime::UNIX_EPOCH);
-        let modified: DateTime<Utc> = metadata
+            .map(|t| {
+                let time = DateTime::<Utc>::from(t);
+                time.with_timezone(TIME_ZONE)
+            })
+            .unwrap_or_else(|_| DateTime::UNIX_EPOCH.into());
+        let modified = metadata
             .modified()
-            .map(|t| t.into())
-            .unwrap_or_else(|_| DateTime::UNIX_EPOCH);
+            .map(|t| {
+                let time = DateTime::<Utc>::from(t);
+                time.with_timezone(TIME_ZONE)
+            })
+            .unwrap_or_else(|_| DateTime::UNIX_EPOCH.into());
         let size = metadata.len();
         let parent_path = path.parent().map(|p| p.display().to_string());
 
@@ -55,26 +63,37 @@ mod db {
         Pool::new(url.as_str())
     }
 
-    /// 批量插入文件信息，存在则更新time_last_written和file_size
+    // 批量插入文件信息，存在则更新time_last_written和file_size
     pub async fn insert_file_infos(conn: &mut Conn, infos: &[FileInfo]) -> mysql_async::Result<()> {
         if infos.is_empty() {
             return Ok(());
         }
         let mut sql = String::from(
-            "INSERT INTO testdata.file_info (file_path, file_name, time_created, time_last_written, file_size, parent_directory) VALUES ",
+            "INSERT INTO testdata.file_info (file_path, file_name, time_created, time_last_written, file_size, cust_code) VALUES ",
         );
-        let mut params = Vec::new();
+        let mut params: Vec<Option<String>> = Vec::new();
         for (i, info) in infos.iter().enumerate() {
             if i > 0 {
                 sql.push(',');
             }
             sql.push_str("(?, ?, ?, ?, ?, ?)");
-            params.push(info.path.clone());
-            params.push(info.filename.clone());
-            params.push(info.created_at.format("%Y-%m-%d %H:%M:%S").to_string());
-            params.push(info.modified_at.format("%Y-%m-%d %H:%M:%S").to_string());
-            params.push(info.size.to_string());
-            params.push(info.parent_path.clone().unwrap_or_else(|| "".to_string()));
+            params.push(Some(info.path.clone()));
+            params.push(Some(info.filename.clone()));
+            params.push(Some(
+                info.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            ));
+            params.push(Some(
+                info.modified_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            ));
+            params.push(Some(info.size.to_string()));
+            // 分割结果为空字符串或无分隔符，则返回None
+            let cust_code = info
+                .filename
+                .split_once('_')
+                .map(|(prefix, _)| prefix)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            params.push(cust_code);
         }
         sql.push_str(" ON DUPLICATE KEY UPDATE time_last_written=VALUES(time_last_written), file_size=VALUES(file_size)");
         conn.exec_drop(sql, params).await

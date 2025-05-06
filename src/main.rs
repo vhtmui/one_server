@@ -1,10 +1,12 @@
 use macro_rules_attribute::apply;
 use ratatui::{
     Terminal,
-    crossterm::{execute, terminal::{EnterAlternateScreen,enable_raw_mode} },
+    crossterm::{
+        execute,
+        terminal::{EnterAlternateScreen, enable_raw_mode},
+    },
     prelude::CrosstermBackend,
-    restore
-    
+    restore,
 };
 use serde::Deserialize;
 use serde_json;
@@ -28,8 +30,8 @@ use one_server::{
 #[apply(main!)]
 async fn main() {
     set_panic_hook();
-    enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen);
+    enable_raw_mode().unwrap();
+    execute!(stdout(), EnterAlternateScreen).unwrap();
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend).unwrap();
 

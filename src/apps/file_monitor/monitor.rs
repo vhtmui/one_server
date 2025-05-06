@@ -23,7 +23,7 @@ use walkdir::WalkDir;
 
 use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
 
-const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
+pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
 pub struct Monitor {
     pub path: PathBuf,
@@ -109,7 +109,8 @@ impl Monitor {
 
         let ss_clone2 = shared_state.clone();
         let handle = thread::spawn(move || {
-            smol::block_on(async {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
                 Monitor::scan_and_update_dir(ss_clone2, &path).await?;
                 Ok::<(), std::io::Error>(())
             })?;
@@ -458,6 +459,9 @@ impl Monitor {
     }
 
     async fn handle_pathstring(path: &str) -> PathBuf {
+        // 转换为windows风格
+        let path = path.replace('/', r#"\"#);
+
         // 读取配置
         let cfg_path = PathBuf::from("asset/cfg.json");
         let cfg_str = fs::read_to_string(&cfg_path)
@@ -627,7 +631,7 @@ async fn test_path_construction() {
 
     let path_str2 = "/AC03/ASDFDSAFDSA.csv";
     let path2 = Monitor::handle_pathstring(path_str2).await;
-    assert_eq!(PathBuf::from("E:\\testdata\\AC03\\ASDFDSAFDSA.csv"), path2);
+    assert_eq!(PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"), path2);
     assert_eq!(
         PathBuf::from("E:\\testdata\\QT-8100HP\\TEST-143\\AA17_AiP405rt.csv"),
         path
@@ -636,7 +640,7 @@ async fn test_path_construction() {
 
 #[test]
 fn test_file_path() {
-    let path = PathBuf::from("\\asset\\cfg.json");
+    let path = PathBuf::from("asset\\cfg.json");
     if !std::fs::exists(&path).unwrap() {
         eprintln!(
             "File does not exist, current path is {}, and your path is {}",

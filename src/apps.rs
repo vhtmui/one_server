@@ -2,7 +2,6 @@ use std::io::Stdout;
 use std::time::Instant;
 use std::{ops::Deref, time::Duration};
 
-use chrono::Local;
 use ratatui::layout::Rect;
 use ratatui::prelude::CrosstermBackend;
 use ratatui::style::Styled;
@@ -66,7 +65,7 @@ impl Apps {
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<bool, std::io::Error> {
         // let data_time_now = Local::now();
-        'app:loop {
+        'app: loop {
             terminal
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
                 .unwrap();
@@ -111,62 +110,60 @@ impl Apps {
     }
 
     pub fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
-        match event {
-            Event::Key(KeyEvent {
-                code,
-                kind: KeyEventKind::Press,
-                ..
-            }) => {
-                // if self.last_event_time.elapsed() < THROTTLE_DURATION {
-                //     return Ok(Default);
-                // }
-                // self.last_event_time = Instant::now();
+        // if self.last_event_time.elapsed() < THROTTLE_DURATION {
+        //     return Ok(Default);
+        // }
+        // self.last_event_time = Instant::now();
 
-                let result = if self.menu.show {
-                    self.handle_menu_event(code)
-                } else {
-                    self.get_current_app().handle_event(code)
-                };
+        let result = if self.menu.show {
+            self.handle_menu_event(event)
+        } else {
+            self.get_current_app().handle_event(event)
+        };
 
-                match result {
-                    Ok(ExitProgress) => Ok(ExitProgress),
-                    Ok(ToggleMenu) => {
-                        self.toggle_menu();
-                        Ok(Default)
-                    }
-                    Ok(Default) => Ok(Default),
-                    Err(e) => Err(e),
-                }
+        match result {
+            Ok(ExitProgress) => Ok(ExitProgress),
+            Ok(ToggleMenu) => {
+                self.toggle_menu();
+                Ok(Default)
             }
-            _ => Ok(Default),
+            Ok(Default) => Ok(Default),
+            Err(e) => Err(e),
         }
     }
 
-    fn handle_menu_event(&mut self, code: KeyCode) -> Result<AppAction, std::io::Error> {
-        match code {
-            KeyCode::Esc => self.toggle_menu(),
-            KeyCode::Enter => {
-                if let Some(index) = self.menu.state.selected() {
-                    self.current_app = index;
-                    self.toggle_menu();
+    fn handle_menu_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
+        if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Press,
+            ..
+        }) = event
+        {
+            match code {
+                KeyCode::Esc => self.toggle_menu(),
+                KeyCode::Enter => {
+                    if let Some(index) = self.menu.state.selected() {
+                        self.current_app = index;
+                        self.toggle_menu();
+                    }
                 }
-            }
-            KeyCode::Char('q') => {
-                if self.menu.show {
-                    return Ok(ExitProgress);
+                KeyCode::Char('q') => {
+                    if self.menu.show {
+                        return Ok(ExitProgress);
+                    }
                 }
-            }
-            KeyCode::Up => {
-                if self.menu.show {
-                    self.menu.state.select_previous();
+                KeyCode::Up => {
+                    if self.menu.show {
+                        self.menu.state.select_previous();
+                    }
                 }
-            }
-            KeyCode::Down => {
-                if self.menu.show {
-                    self.menu.state.select_next();
+                KeyCode::Down => {
+                    if self.menu.show {
+                        self.menu.state.select_next();
+                    }
                 }
+                _ => {}
             }
-            _ => {}
         }
 
         Ok(Default)

@@ -4,6 +4,7 @@ pub mod monitor;
 pub use monitor::*;
 
 use std::cell::RefCell;
+use std::f32::consts::E;
 use std::path::PathBuf;
 use std::vec;
 
@@ -185,9 +186,15 @@ impl FileMonitor {
 
         let files_got = Line::from(format!("Files got: {}", self.monitor.files_got()));
 
-        let file_reading = Line::from(format!("File reading: {}", self.monitor.file_reading().display()));
+        let file_reading = Line::from(format!(
+            "File reading: {}",
+            self.monitor.file_reading().display()
+        ));
 
-        let scanner_status = Line::from(format!("Scanner status: {}", self.monitor.get_scanner_status()));
+        let scanner_status = Line::from(format!(
+            "Scanner status: {}",
+            self.monitor.get_scanner_status()
+        ));
 
         let files_recorded = Line::from(format!(
             "Files recorded: {:?}",
@@ -269,85 +276,148 @@ impl WidgetRef for FileMonitor {
 }
 
 impl MyWidgets for FileMonitor {
-    fn handle_event(&mut self, code: KeyCode) -> Result<AppAction, std::io::Error> {
-        match code {
-            KeyCode::Esc => {
-                return Ok(ToggleMenu);
-            }
-            KeyCode::Tab => {
-                self.toggle_area();
-            }
-            code => {
-                // if in menu area
-                match self.current_area {
-                    CurrentArea::ControlPanelArea => match code {
-                        KeyCode::Enter => {
-                            if !self.menu_state.borrow().selected_indices.is_empty() {
-                                match self.get_menu_result().as_str() {
-                                    "monitor-start" => {
-                                        if self.monitor.get_status() != Running {
-                                            self.monitor.start_monitor().unwrap();
-                                        }
-                                    }
-                                    "monitor-stop" => {
-                                        if self.monitor.get_status() != Stopped {
-                                            self.monitor.stop_monitor();
-                                        }
-                                    }
-                                    "scanner-start" => {
-                                        if self.monitor.get_scanner_status() != "Running" {
-                                            self.set_current_area(CurrentArea::InputArea);
-                                        }
-                                    }
-                                    _ => {}
-                                };
+    fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
+        // if in menu area
+        match self.current_area {
+            CurrentArea::ControlPanelArea => match event {
+                Event::Key(KeyEvent {
+                    code: KeyCode::Enter,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    if !self.menu_state.borrow().selected_indices.is_empty() {
+                        match self.get_menu_result().as_str() {
+                            "monitor-start" => {
+                                if self.monitor.get_status() != Running {
+                                    self.monitor.start_monitor().unwrap();
+                                }
                             }
-                        }
-                        KeyCode::Up => {
-                            self.menu_state.borrow_mut().select_up();
-                        }
-                        KeyCode::Down => {
-                            self.menu_state.borrow_mut().select_down();
-                        }
-                        KeyCode::Left => {
-                            self.menu_state.borrow_mut().select_left();
-                        }
-                        KeyCode::Right => {
-                            self.menu_state.borrow_mut().select_right();
-                        }
-                        _ => {}
-                    },
-                    CurrentArea::LogArea => match code {
-                        KeyCode::Up => {
-                            self.log_list_state.borrow_mut().scroll_up_by(1);
-                        }
-                        KeyCode::Down => {
-                            self.log_list_state.borrow_mut().scroll_down_by(1);
-                        }
-                        _ => {}
-                    },
-                    CurrentArea::InputArea => {
-                        match code {
-                            KeyCode::Char(c) => {
-                                self.input_content.push(c);
+                            "monitor-stop" => {
+                                if self.monitor.get_status() != Stopped {
+                                    self.monitor.stop_monitor();
+                                }
                             }
-                            KeyCode::Backspace => {
-                                self.input_content.pop();
+                            "scanner-start" => {
+                                if self.monitor.get_scanner_status() != "Running" {
+                                    self.set_current_area(CurrentArea::InputArea);
+                                }
                             }
-                            KeyCode::Enter => {
-                                self.monitor.start_scanner(PathBuf::from(self.input_content.clone()))?;
-                                self.set_current_area(CurrentArea::LogArea);
-                            }
-                            KeyCode::Esc => {
-                                self.set_current_area(CurrentArea::LogArea);
-                            }
-                            _ => {
-                            }
-                        }
+                            _ => {}
+                        };
                     }
-                    _ => {}
                 }
-            }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Up,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.menu_state.borrow_mut().select_up();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Down,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.menu_state.borrow_mut().select_down();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Left,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.menu_state.borrow_mut().select_left();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Right,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.menu_state.borrow_mut().select_right();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Esc,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    return Ok(ToggleMenu);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Tab,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.toggle_area();
+                }
+                _ => {}
+            },
+            CurrentArea::LogArea => match event {
+                Event::Key(KeyEvent {
+                    code: KeyCode::Up,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.log_list_state.borrow_mut().scroll_up_by(1);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Down,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.log_list_state.borrow_mut().scroll_down_by(1);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Esc,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    return Ok(ToggleMenu);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Tab,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.toggle_area();
+                }
+                _ => {}
+            },
+            CurrentArea::InputArea => match event {
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char(c),
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.input_content.push(c);
+                }
+                Event::Paste(s) => {
+                    self.input_content.push_str(&s);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Backspace,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.input_content.pop();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Enter,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.monitor
+                        .start_scanner(PathBuf::from(self.input_content.clone()))?;
+                    self.set_current_area(CurrentArea::LogArea);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Esc,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.set_current_area(CurrentArea::ControlPanelArea);
+                }
+                _ => {}
+            },
+            _ => {}
         }
 
         Ok(Default)
