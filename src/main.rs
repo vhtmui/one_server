@@ -1,22 +1,42 @@
 use macro_rules_attribute::apply;
+use ratatui::{
+    Terminal,
+    crossterm::{execute, terminal::{EnterAlternateScreen,enable_raw_mode} },
+    prelude::CrosstermBackend,
+    restore
+    
+};
 use serde::Deserialize;
 use serde_json;
 use smol_macros::main;
-use std::fs;
+
+use std::{fs, io::stdout};
+
+fn set_panic_hook() {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore();
+        hook(info);
+    }));
+}
 
 use one_server::{
-    add_widgets,
+    Config, add_widgets,
     apps::{Apps, file_monitor::FileMonitor},
-    Config,
 };
 
 #[apply(main!)]
 async fn main() {
-    let mut terminal = ratatui::init();
+    set_panic_hook();
+    enable_raw_mode()?;
+    execute!(stdout(), EnterAlternateScreen);
+    let backend = CrosstermBackend::new(stdout());
+    let mut terminal = Terminal::new(backend).unwrap();
 
     let app = Apps::new();
 
-    let path: Config = serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
+    let path: Config =
+        serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
 
     let file_monitor = (
         String::from("file_monitor"),

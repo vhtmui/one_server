@@ -102,26 +102,31 @@ impl Monitor {
 
     pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
         let shared_state = self.shared_state.clone();
-        shared_state.lock().unwrap().scanner_status = "Running...".to_string();
 
         let ss_clone = shared_state.clone();
-        Self::set_panic_hook(ss_clone);
+
+        shared_state.lock().unwrap().scanner_status = "Running".to_string();
 
         let ss_clone2 = shared_state.clone();
         let handle = thread::spawn(move || {
-            let _ = Monitor::scan_and_update_dir(ss_clone2, &path);
+            smol::block_on(async {
+                Monitor::scan_and_update_dir(ss_clone2, &path).await?;
+                Ok::<(), std::io::Error>(())
+            })?;
+            Ok::<(), std::io::Error>(())
         });
 
         log!(
             shared_state,
             Utc::now().with_timezone(TIME_ZONE),
             MonitorEventType::Scanner,
-            "Scaner started".to_string()
+            "Scanner started".to_string()
         );
 
         let future = async move {
             loop {
                 if handle.is_finished() {
+                    let _ = handle.join().unwrap();
                     shared_state.lock().unwrap().scanner_status = "Finished".to_string();
                     log!(
                         shared_state,
@@ -163,9 +168,7 @@ impl Monitor {
         );
 
         // 调用数据库更新
-        maintainer::process_paths(files).await.map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::Other, format!("DB update error: {}", e))
-        })?;
+        maintainer::process_paths(files).await?;
 
         log!(
             shared_state,
@@ -253,9 +256,6 @@ impl Monitor {
 
     // 线程中运行
     fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: PathBuf) -> Result<()> {
-        let ss_clone = Arc::clone(&shared_state);
-        Self::set_panic_hook(ss_clone);
-
         smol::block_on(async {
             let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
             let mut watcher = notify::recommended_watcher(tx).unwrap();

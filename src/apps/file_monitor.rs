@@ -147,7 +147,7 @@ impl FileMonitor {
         self.current_area.toggle();
     }
 
-    pub fn set_current_area(&mut self, area: CurrentArea) {
+    fn set_current_area(&mut self, area: CurrentArea) {
         self.current_area.set_current_area(area);
     }
 
@@ -183,9 +183,11 @@ impl FileMonitor {
 
         let elapsed_time = Line::from(format!("Elapsed time: {}", self.monitor.get_elapsed_time()));
 
-        let files_got = Line::from(format!("Files got: {:?}", self.monitor.files_got()));
+        let files_got = Line::from(format!("Files got: {}", self.monitor.files_got()));
 
-        let file_reading = Line::from(format!("File reading: {:?}", self.monitor.file_reading()));
+        let file_reading = Line::from(format!("File reading: {}", self.monitor.file_reading().display()));
+
+        let scanner_status = Line::from(format!("Scanner status: {}", self.monitor.get_scanner_status()));
 
         let files_recorded = Line::from(format!(
             "Files recorded: {:?}",
@@ -199,6 +201,7 @@ impl FileMonitor {
             files_got,
             files_recorded,
             file_reading,
+            scanner_status,
         ]);
 
         Paragraph::new(text).block(block).render_ref(area, buf);
