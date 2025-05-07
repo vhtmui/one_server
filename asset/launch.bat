@@ -1,0 +1,1 @@
+.\one_server.exe --cli

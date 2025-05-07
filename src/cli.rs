@@ -16,7 +16,6 @@ pub const CMD_INTO_SCANNER: &str = "intosc";
 pub const CMD_SHOW_STATUS: &str = "showstatus";
 pub const CMD_SHOW_LOGS: &str = "showlogs";
 pub const CMD_START_SCAN: &str = "start";
-pub const CMD_INPUT_DIR: &str = "<Dir>";
 
 pub fn run_cli_mode() {
     println!("进入命令行模式，输入 help 查看命令，:q 退出。");
@@ -92,7 +91,7 @@ fn into_scanner() {
             CMD_START_SCAN => {
                 println!("输入目录路径：");
                 loop {
-                    print!("scanner\\inputdir> ");
+                    print!("\\scanner\\inputdir> ");
                     io::stdout().flush().unwrap();
                     let mut cmd = String::new();
                     if io::stdin().read_line(&mut cmd).is_err() {
@@ -132,7 +131,6 @@ fn help(topic: &str) {
         (CMD_HELP, (CMD_HELP, "查看帮助")),
         (CMD_QUIT, (CMD_QUIT, "退出")),
         // MARK: scanner
-        (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录路径")),
         (CMD_SHOW_STATUS, (CMD_SHOW_STATUS, "查看状态")),
         (CMD_SHOW_LOGS, (CMD_SHOW_LOGS, "查看日志")),
         (CMD_START_SCAN, (CMD_START_SCAN, "开始扫描")),
