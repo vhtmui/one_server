@@ -1,4 +1,5 @@
 use std::io::Stdout;
+use std::thread;
 use std::time::Instant;
 use std::{ops::Deref, time::Duration};
 
@@ -93,6 +94,8 @@ impl Apps {
                     break 'app;
                 }
             }
+
+            thread::sleep(Duration::from_millis(16));
         }
 
         Ok(true)

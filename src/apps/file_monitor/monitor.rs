@@ -551,6 +551,17 @@ impl Monitor {
             .files_recorded
     }
 
+    pub fn get_logs(&self) -> Vec<String> {
+        let logs = &self.shared_state.lock().unwrap().logs;
+        logs.raw_list
+            .iter()
+            .map(|e| {
+                let (_, text, _) = WrapList::create_text(e);
+                format!("{}", text)
+            })
+            .collect()
+    }
+
     fn set_panic_hook(shared_state: Arc<Mutex<SharedState>>) {
         panic::set_hook(Box::new(move |panic_info| {
             log!(

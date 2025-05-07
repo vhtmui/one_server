@@ -104,7 +104,7 @@ pub struct FileMonitor {
     title: String,
     menu_struct: SerializableMenuItem,
     menu_state: RefCell<MenuState>,
-    monitor: Monitor,
+    pub monitor: Monitor,
     log_list_state: RefCell<ListState>,
     input_content: String,
     current_area: CurrentArea,

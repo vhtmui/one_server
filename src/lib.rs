@@ -1,5 +1,6 @@
 pub mod apps;
 pub mod my_widgets;
+pub mod cli;
 
 use serde::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf};

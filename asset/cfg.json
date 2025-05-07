@@ -1,6 +1,6 @@
 {
     "file_monitor": {
-        "monitor_path": "C:\\inetpub\\logs\\LogFiles\\FTPSVC2",
+        "monitor_path": "\\10.50.13.189\\LogFiles",
         "prefix_map_of_extract_path": {
             "ac03": [
                 "\\AC03",
@@ -8,7 +8,7 @@
             ],
             "default": [
                 "\\",
-                "E:\\testdata\\"
+                "\\10.50.13.189\\testdata"
             ]
         }
     }

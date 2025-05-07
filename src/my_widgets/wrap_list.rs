@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, io::prelude};
 
 use hyphenation::{Language, Load, Standard};
 use ratatui::{
@@ -33,8 +33,7 @@ impl WrapList {
         }
     }
 
-    /// Create a ListItem from a MonitorEvent, use `self.wrap_len`` and `self.dictionary` to wrap the text.
-    fn create_list_item(&self, e: &MonitorEvent) -> ListItem<'static> {
+    pub fn create_text(e: &MonitorEvent) -> (&str, String, Color) {
         let (prefix, color) = match e.event_type {
             MonitorEventType::Error => ("[ERR]  ", Color::Red),
             MonitorEventType::CreatedFile => ("[CREATE]", Color::Green),
@@ -51,6 +50,12 @@ impl WrapList {
             .unwrap_or_else(|| "--:--:--".into());
 
         let text = format!("{prefix} {time_str} {}", e.message);
+        (prefix, text, color)
+    }
+
+    /// Create a ListItem from a MonitorEvent, use `self.wrap_len`` and `self.dictionary` to wrap the text.
+    fn create_list_item(&self, e: &MonitorEvent) -> ListItem<'static> {
+        let (prefix, text, color) = Self::create_text(e);
 
         let options = textwrap::Options::new(self.wrap_len.unwrap_or(usize::MAX))
             .word_splitter(WordSplitter::Hyphenation(self.dictionary.clone()));

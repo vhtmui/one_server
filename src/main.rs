@@ -12,6 +12,7 @@ use serde::Deserialize;
 use serde_json;
 use smol_macros::main;
 
+use std::io::{self, Write};
 use std::{fs, io::stdout};
 
 fn set_panic_hook() {
@@ -23,12 +24,18 @@ fn set_panic_hook() {
 }
 
 use one_server::{
-    Config, add_widgets,
-    apps::{Apps, file_monitor::FileMonitor},
+    add_widgets, apps::{file_monitor::FileMonitor, Apps}, cli, Config
 };
 
 #[apply(main!)]
 async fn main() {
+    let args = std::env::args().collect::<Vec<_>>();
+
+    if args.iter().any(|x| x == "--cli" || x == "-c") {
+        cli::run_cli_mode();
+        return;
+    }
+
     set_panic_hook();
     enable_raw_mode().unwrap();
     execute!(stdout(), EnterAlternateScreen).unwrap();
@@ -53,9 +60,4 @@ async fn main() {
         .set_current_app(0)
         .run(&mut terminal)
         .unwrap();
-}
-
-#[derive(Deserialize, Debug)]
-struct Cfg {
-    file_monitor: String,
 }
