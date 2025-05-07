@@ -127,13 +127,12 @@ impl Monitor {
         let future = async move {
             loop {
                 if handle.is_finished() {
-                    let _ = handle.join().unwrap();
                     shared_state.lock().unwrap().scanner_status = "Finished".to_string();
                     log!(
                         shared_state,
                         Utc::now().with_timezone(TIME_ZONE),
                         MonitorEventType::Scanner,
-                        "Scanner finished".to_string()
+                        format!("Scanner finished with {:?}", handle.join().unwrap())
                     );
                     break;
                 }

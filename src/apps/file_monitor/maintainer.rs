@@ -126,7 +126,7 @@ pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
     }
 
     // 分批插入
-    let batch_size = 1000;
+    let batch_size = 100;
     let mut idx = 0;
     while idx < file_infos.len() {
         let end = (idx + batch_size).min(file_infos.len());
@@ -158,7 +158,7 @@ fn test_mysql_url() {
 }
 
 #[test]
-fn insert_file_info() {
+fn conn_and_insert() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let base = std::env::temp_dir().join("test_asset");
@@ -174,4 +174,11 @@ fn insert_file_info() {
 
         std::fs::remove_dir_all(&base).unwrap();
     });
+}
+
+#[tokio::test]
+async fn test_conn(){
+    let pool = Pool::new("mysql://q:sSHKjVHnNJmdVHA@10.50.3.70:3306/testdata");
+
+    assert!(pool.get_conn().await.is_ok());
 }

@@ -1,6 +1,6 @@
 {
     "file_monitor": {
-        "monitor_path": "asset",
+        "monitor_path": "C:\\inetpub\\logs\\LogFiles\\FTPSVC2",
         "prefix_map_of_extract_path": {
             "ac03": [
                 "\\AC03",
