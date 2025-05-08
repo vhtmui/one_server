@@ -73,6 +73,8 @@ fn into_filemonitor() {
                     CMD_SHOW_STATUS,
                     CMD_SHOW_LOGS,
                     CMD_START_SCAN,
+                    CMD_START_MONITOR,
+                    CMD_STOP_MONITOR,
                     CMD_QUIT,
                     CMD_HELP,
                 ]);
@@ -104,7 +106,7 @@ fn into_filemonitor() {
                         }
                         CMD_QUIT => break,
                         CMD_HELP => {
-                            help(vec![CMD_QUIT, CMD_HELP]);
+                            help(vec![CMD_QUIT, CMD_HELP, CMD_INPUT_DIR]);
                             continue;
                         }
                         dir => {
@@ -152,6 +154,7 @@ fn help(cmds: Vec<&str>) {
         (CMD_START_MONITOR, (CMD_START_MONITOR, "开始监控")),
         (CMD_STOP_MONITOR, (CMD_STOP_MONITOR, "停止监控")),
         (CMD_START_SCAN, (CMD_START_SCAN, "开始扫描")),
+        (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录"))
     ]);
     println!("命令列表：");
 
