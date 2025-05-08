@@ -1,7 +1,14 @@
 use crate::{Config, apps::file_monitor::maintainer, log};
 
 use std::{
-    collections::HashMap, env::current_exe, panic, path::{Path, PathBuf}, sync::{mpsc, Arc, Mutex}, thread, time::Duration
+    collections::HashMap,
+    env::current_exe,
+    panic,
+    path::{Path, PathBuf},
+    result,
+    sync::{Arc, Mutex, mpsc},
+    thread,
+    time::Duration,
 };
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
@@ -448,13 +455,13 @@ impl Monitor {
                             let new_offset = current_offset + n as u64;
 
                             if let Some(words) = line.split_once("STOR 226 ") {
-                               let path_str = words.1.trim_end();
-                               return Some((
-                                   (Self::handle_pathstring(path_str).await, new_offset),
-                                   (reader, new_offset),
-                               ));
+                                let path_str = words.1.trim_end();
+                                return Some((
+                                    (Self::handle_pathstring(path_str).await, new_offset),
+                                    (reader, new_offset),
+                                ));
                             }
-                            current_offset = new_offset; 
+                            current_offset = new_offset;
                         }
                         Err(e) => {
                             eprintln!("Error reading log line: {}", e);
@@ -653,16 +660,25 @@ macro_rules! log {
 
 #[tokio::test]
 async fn test_path_construction() {
-    let path_str = "/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT";
-    let path = Monitor::handle_pathstring(path_str).await;
+    let path = Monitor::handle_pathstring("/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT").await;
 
-    let path_str2 = "/AC03/ASDFDSAFDSA.csv";
-    let path2 = Monitor::handle_pathstring(path_str2).await;
+    let path_ac03 = Monitor::handle_pathstring("/AC03/ASDFDSAFDSA.csv").await;
 
-    assert_eq!(PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"), path2);
+    let path_with_whitespace = Monitor::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv").await;
+
     assert_eq!(
-        PathBuf::from("E:\\testdata\\CTA8280H\\TEST-48\\DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT"),
+        PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"),
+        path_ac03
+    );
+    assert_eq!(
+        PathBuf::from(
+            "E:\\testdata\\CTA8280H\\TEST-48\\DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT"
+        ),
         path
+    );
+    assert_eq!(
+        PathBuf::from("E:\\testdata\\OS2000\\AS  DFDSAFDSA.csv"),
+        path_with_whitespace
     );
 }
 
@@ -680,9 +696,21 @@ fn test_file_path() {
 }
 
 #[tokio::test]
-async fn extract_path() {
-    let content = "2025-05-07 16:42:15 10.53.2.70 STOR 226 /CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT";
+async fn test_extract_path() {
+    assert_eq!(
+    extract_path(
+        "2025-05-07 16:42:15 10.53.2.70 STOR 226 /CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT").await,
+        PathBuf::from(
+            "E:\\testdata\\CTA8280H\\TEST-48\\DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT"
+            ),
+    );
+    assert_eq!(
+        extract_path("2025-05-07 16:42:15 10.53.2.70 STOR 226 /OS2000/AS DFDSAFDSA.csv").await,
+        PathBuf::from("E:\\testdata\\OS2000\\AS DFDSAFDSA.csv"),
+    );
+}
 
+async fn extract_path(content: &str) -> PathBuf {
     let base = std::env::temp_dir().join("test_asset");
     std::fs::create_dir_all(&base).unwrap();
     let file = base.join("fileasdfsfsadfasd");
@@ -692,11 +720,5 @@ async fn extract_path() {
     pin!(extracted_paths);
 
     let path = extracted_paths.next().await.unwrap();
-
-    assert_eq!(
-        path.0,
-        PathBuf::from(
-            "E:\\testdata\\CTA8280H\\TEST-48\\DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT"
-        )
-    );
+    path.0
 }
