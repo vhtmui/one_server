@@ -192,7 +192,7 @@ impl FileMonitor {
         ));
 
         let scanner_status = Line::from(format!(
-            "Scanner status: {}",
+            "Scanner status: {:?}",
             self.monitor.get_scanner_status()
         ));
 
@@ -288,17 +288,13 @@ impl MyWidgets for FileMonitor {
                     if !self.menu_state.borrow().selected_indices.is_empty() {
                         match self.get_menu_result().as_str() {
                             "monitor-start" => {
-                                if self.monitor.get_status() != Running {
-                                    self.monitor.start_monitor().unwrap();
-                                }
+                                self.monitor.start_monitor().unwrap();
                             }
                             "monitor-stop" => {
-                                if self.monitor.get_status() != Stopped {
-                                    self.monitor.stop_monitor();
-                                }
+                                self.monitor.stop_monitor();
                             }
                             "scanner-start" => {
-                                if self.monitor.get_scanner_status() != "Running" {
+                                if self.monitor.get_scanner_status() != Running {
                                     self.set_current_area(CurrentArea::InputArea);
                                 }
                             }
@@ -406,7 +402,7 @@ impl MyWidgets for FileMonitor {
                 }) => {
                     self.monitor
                         .start_scanner(PathBuf::from(self.input_content.clone()))?;
-                    self.set_current_area(CurrentArea::LogArea);
+                    self.set_current_area(CurrentArea::ControlPanelArea);
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Esc,

@@ -37,7 +37,7 @@ pub struct SharedState {
     pub status: MonitorStatus,
     pub file_statistic: FileStatistics,
     pub logs: WrapList,
-    pub scanner_status: String,
+    pub scanner_status: MonitorStatus,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -46,6 +46,7 @@ pub enum MonitorStatus {
     Stopped,
     Paused,
     Error,
+    Finished,
 }
 
 #[derive(Default)]
@@ -90,7 +91,7 @@ impl Monitor {
             status: Stopped,
             file_statistic: FileStatistics::default(),
             logs: WrapList::new(log_size),
-            scanner_status: "".to_string(),
+            scanner_status: Stopped,
         }));
 
         Monitor {
@@ -101,11 +102,19 @@ impl Monitor {
     }
 
     pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
+        if self.shared_state.lock().unwrap().scanner_status == Running {
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                MonitorEventType::Scanner,
+                "Scanner already running".to_string()
+            );
+            return Ok(());
+        }
+
         let shared_state = self.shared_state.clone();
 
-        let ss_clone = shared_state.clone();
-
-        shared_state.lock().unwrap().scanner_status = "Running".to_string();
+        shared_state.lock().unwrap().set_scanner_status(Running);
 
         let ss_clone2 = shared_state.clone();
         let handle = thread::spawn(move || {
@@ -127,12 +136,14 @@ impl Monitor {
         let future = async move {
             loop {
                 if handle.is_finished() {
-                    shared_state.lock().unwrap().scanner_status = "Finished".to_string();
+                    shared_state.lock().unwrap().set_scanner_status(Finished);
+                    let handle_result = handle.join().unwrap();
+
                     log!(
                         shared_state,
                         Utc::now().with_timezone(TIME_ZONE),
                         MonitorEventType::Scanner,
-                        format!("Scanner finished with {:?}", handle.join().unwrap())
+                        format!("Scanner finished with {:?}", handle_result)
                     );
                     break;
                 }
@@ -180,10 +191,15 @@ impl Monitor {
     }
 
     pub fn stop_monitor(&mut self) {
+        if self.shared_state.lock().unwrap().status == Stopped {
+            return;
+        }
+
         self.shared_state
             .lock()
             .unwrap()
             .set_status(MonitorStatus::Stopped);
+
         thread::sleep(Duration::from_millis(800));
 
         if let Some(handle) = self.handle.take() {
@@ -526,8 +542,8 @@ impl Monitor {
         self.shared_state.lock().unwrap().get_status()
     }
 
-    pub fn get_scanner_status(&self) -> String {
-        self.shared_state.lock().unwrap().scanner_status.clone()
+    pub fn get_scanner_status(&self) -> MonitorStatus {
+        self.shared_state.lock().unwrap().get_scanner_status()
     }
 
     pub fn files_got(&self) -> usize {
@@ -616,6 +632,15 @@ impl SharedState {
 
     fn set_status(&mut self, status: MonitorStatus) {
         self.status = status;
+    }
+
+    fn get_scanner_status(&self) -> MonitorStatus {
+        self.scanner_status.clone()
+    }
+
+    fn set_scanner_status(&mut self, status: MonitorStatus) {
+        self.scanner_status = status;
+
     }
 
     fn set_files_reading(&mut self, path: &PathBuf) {

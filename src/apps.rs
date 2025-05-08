@@ -95,7 +95,7 @@ impl Apps {
                 }
             }
 
-            thread::sleep(Duration::from_millis(16));
+            thread::sleep(Duration::from_millis(33));
         }
 
         Ok(true)

@@ -56,6 +56,8 @@ impl FileInfo {
 }
 
 mod db {
+    use chrono::Local;
+
     use super::*;
 
     pub async fn init_pool() -> Pool {
@@ -69,7 +71,7 @@ mod db {
             return Ok(());
         }
         let mut sql = String::from(
-            "INSERT INTO testdata.file_info (file_path, file_name, time_created, time_last_written, file_size, cust_code) VALUES ",
+            "INSERT INTO testdata.file_info (file_path, file_name, time_created, time_last_written, file_size, cust_code, time_inserted) VALUES ",
         );
         let mut params: Vec<Option<String>> = Vec::new();
         for (i, info) in infos.iter().enumerate() {
@@ -94,8 +96,9 @@ mod db {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string());
             params.push(cust_code);
+            params.push(Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()));
         }
-        sql.push_str(" ON DUPLICATE KEY UPDATE time_last_written=VALUES(time_last_written), file_size=VALUES(file_size)");
+        sql.push_str(" ON DUPLICATE KEY UPDATE time_last_written=VALUES(time_last_written), file_size=VALUES(file_size), time_inserted=VALUES(time_inserted)");
         conn.exec_drop(sql, params).await
     }
 }
@@ -177,7 +180,7 @@ fn conn_and_insert() {
 }
 
 #[tokio::test]
-async fn test_conn(){
+async fn test_conn() {
     let pool = Pool::new("mysql://q:sSHKjVHnNJmdVHA@10.50.3.70:3306/testdata");
 
     assert!(pool.get_conn().await.is_ok());
