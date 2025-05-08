@@ -1,12 +1,7 @@
 use crate::{Config, apps::file_monitor::maintainer, log};
 
 use std::{
-    collections::HashMap,
-    panic,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, mpsc},
-    thread,
-    time::Duration,
+    collections::HashMap, env::current_exe, panic, path::{Path, PathBuf}, sync::{mpsc, Arc, Mutex}, thread, time::Duration
 };
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
@@ -433,6 +428,7 @@ impl Monitor {
         Ok(())
     }
 
+    // 读取指定路径中从指定偏移量开始的内容，并提取FTP接收的文件路径
     async fn extract_path_stream(
         path: &PathBuf,
         offset: u64,
@@ -450,18 +446,15 @@ impl Monitor {
                         Ok(0) => return None, // EOF
                         Ok(n) => {
                             let new_offset = current_offset + n as u64;
-                            let words = line.split_whitespace().collect::<Vec<&str>>();
-                            if words.len() == 6 && words[3] == "STOR" && words[4] == "226" {
-                                let path_str =
-                                    line.split(words[4]).collect::<Vec<&str>>()[1].trim();
-                                return Some((
-                                    (Self::handle_pathstring(path_str).await, new_offset),
-                                    (reader, new_offset),
-                                ));
-                            } else {
-                                current_offset = new_offset;
-                                continue;
+
+                            if let Some(words) = line.split_once("STOR 226 ") {
+                               let path_str = words.1.trim_end();
+                               return Some((
+                                   (Self::handle_pathstring(path_str).await, new_offset),
+                                   (reader, new_offset),
+                               ));
                             }
+                            current_offset = new_offset; 
                         }
                         Err(e) => {
                             eprintln!("Error reading log line: {}", e);
@@ -640,7 +633,6 @@ impl SharedState {
 
     fn set_scanner_status(&mut self, status: MonitorStatus) {
         self.scanner_status = status;
-
     }
 
     fn set_files_reading(&mut self, path: &PathBuf) {
@@ -661,14 +653,15 @@ macro_rules! log {
 
 #[tokio::test]
 async fn test_path_construction() {
-    let path_str = "/QT-8100HP/TEST-143/AA17_AiP405rt.csv";
+    let path_str = "/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT";
     let path = Monitor::handle_pathstring(path_str).await;
 
     let path_str2 = "/AC03/ASDFDSAFDSA.csv";
     let path2 = Monitor::handle_pathstring(path_str2).await;
+
     assert_eq!(PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"), path2);
     assert_eq!(
-        PathBuf::from("E:\\testdata\\QT-8100HP\\TEST-143\\AA17_AiP405rt.csv"),
+        PathBuf::from("E:\\testdata\\CTA8280H\\TEST-48\\DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT"),
         path
     );
 }
@@ -684,4 +677,26 @@ fn test_file_path() {
         );
         panic!();
     }
+}
+
+#[tokio::test]
+async fn extract_path() {
+    let content = "2025-05-07 16:42:15 10.53.2.70 STOR 226 /CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT";
+
+    let base = std::env::temp_dir().join("test_asset");
+    std::fs::create_dir_all(&base).unwrap();
+    let file = base.join("fileasdfsfsadfasd");
+    std::fs::write(&file, content).unwrap();
+
+    let extracted_paths = Monitor::extract_path_stream(&file, 0).await;
+    pin!(extracted_paths);
+
+    let path = extracted_paths.next().await.unwrap();
+
+    assert_eq!(
+        path.0,
+        PathBuf::from(
+            "E:\\testdata\\CTA8280H\\TEST-48\\DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT"
+        )
+    );
 }

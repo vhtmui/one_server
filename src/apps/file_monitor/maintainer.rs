@@ -78,7 +78,7 @@ mod db {
             if i > 0 {
                 sql.push(',');
             }
-            sql.push_str("(?, ?, ?, ?, ?, ?)");
+            sql.push_str("(?, ?, ?, ?, ?, ?, ?)");
             params.push(Some(info.path.clone()));
             params.push(Some(info.filename.clone()));
             params.push(Some(
@@ -103,10 +103,7 @@ mod db {
     }
 }
 
-/// Example:
-/// ```
-/// process_paths(vec![PathBuf::from("/path/to/file1"), PathBuf::from("/path/to/file2")])
-/// ```
+// 处理路径，将路径下的文件信息插入数据库
 pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
     let pool = db::init_pool().await;
     let mut file_infos = Vec::new();
