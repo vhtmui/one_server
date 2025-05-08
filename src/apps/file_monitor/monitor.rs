@@ -666,6 +666,9 @@ async fn test_path_construction() {
 
     let path_with_whitespace = Monitor::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv").await;
 
+    // windows iis ftp日志会将路径中间的空格替换为`+`号，将`+`不做处理
+    let path_with_special_char = Monitor::handle_pathstring("/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024").await;
+
     assert_eq!(
         PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"),
         path_ac03
@@ -679,6 +682,12 @@ async fn test_path_construction() {
     assert_eq!(
         PathBuf::from("E:\\testdata\\OS2000\\AS  DFDSAFDSA.csv"),
         path_with_whitespace
+    );
+    assert_eq!(
+        PathBuf::from(
+            "E:\\testdata\\123\\  Starting Space\\Mix!@#$%^&()=+{}[];',~_目录\\Sub Folder 中间 空 格\\文件_🌟Unicode_引号_&_Sp  ecial_Chars_最终版_v2.0%20@2024"
+        ),
+        path_with_special_char
     );
 }
 
