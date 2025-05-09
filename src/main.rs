@@ -8,7 +8,6 @@ use ratatui::{
     prelude::CrosstermBackend,
     restore,
 };
-use serde_json;
 use smol_macros::main;
 
 use std::{fs, io::stdout};

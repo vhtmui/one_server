@@ -6,7 +6,7 @@ use std::{
     vec,
 };
 
-use crate::{MyConfig, apps::file_monitor::FileMonitor, get_param, *};
+use crate::{apps::file_monitor::FileMonitor, *};
 
 // 命令常量定义
 pub const CMD_QUIT: &str = ":q";
@@ -55,11 +55,7 @@ pub fn run_cli_mode() {
 fn into_filemonitor() {
     // 创建文件监控器
     let path = load_config().file_monitor.monitor_path;
-    let mut file_monitor = FileMonitor::new(
-        "file_monitor".to_string(),
-        path,
-        50,
-    );
+    let mut file_monitor = FileMonitor::new("file_monitor".to_string(), path, 50);
     loop {
         let cmd = read_trimmed_line("\\filemonitor> ").unwrap_or_else(|| {
             println!("读取输入失败");

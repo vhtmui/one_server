@@ -1,9 +1,7 @@
 use ratatui::{
-    Frame,
     buffer::Buffer,
-    crossterm::event::{KeyCode, Event},
+    crossterm::event::Event,
     layout::{Constraint, Direction, Flex, Layout, Rect},
-    text::Text,
     widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
 };
 

@@ -4,24 +4,21 @@ pub mod monitor;
 pub use monitor::*;
 
 use std::cell::RefCell;
-use std::f32::consts::E;
 use std::path::PathBuf;
 use std::vec;
 
-use hyphenation::{Language, Load, Standard};
 use ratatui::layout::Alignment;
-use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{List, ListItem, ListState, Paragraph, StatefulWidget};
+use ratatui::text::{Line, Text};
+use ratatui::widgets::{ListState, Paragraph, StatefulWidget};
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, read},
-    layout::{Constraint, Direction, Layout, Rect},
+    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind},
+    layout::{Constraint, Direction, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, StatefulWidgetRef, Widget, WidgetRef},
+    widgets::{Block, Borders, StatefulWidgetRef, WidgetRef},
 };
-use textwrap::{Options, WordSplitter, fill};
 
-use crate::my_widgets::{self, menu, render_input_popup};
+use crate::my_widgets::render_input_popup;
 use crate::{
     apps::{
         AppAction::{self, *},
@@ -32,8 +29,6 @@ use crate::{
         menu::{MenuItem, MenuState, SerializableMenuItem},
     },
 };
-
-use super::MENU_HIGHLIGHT_STYLE;
 
 const TITLE_STYLE: Style = Style::new().fg(Color::Green).add_modifier(Modifier::BOLD);
 const MENU_JSON: &str = r#"

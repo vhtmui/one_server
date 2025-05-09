@@ -1,8 +1,7 @@
-use std::{collections::VecDeque, io::prelude};
+use std::collections::VecDeque;
 
 use hyphenation::{Language, Load, Standard};
 use ratatui::{
-    layout::Rect,
     style::{Color, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, StatefulWidgetRef},

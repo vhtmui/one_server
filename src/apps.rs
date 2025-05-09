@@ -1,18 +1,18 @@
 use std::io::Stdout;
 use std::thread;
+use std::time::Duration;
 use std::time::Instant;
-use std::{ops::Deref, time::Duration};
 
 use ratatui::layout::Rect;
 use ratatui::prelude::CrosstermBackend;
 use ratatui::style::Styled;
-use ratatui::widgets::{self, HighlightSpacing, List, ListState, StatefulWidget};
+use ratatui::widgets::{HighlightSpacing, List, ListState, StatefulWidget};
 use ratatui::{
-    Frame, Terminal,
+    Terminal,
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
     style::{Modifier, Style, palette::tailwind::SLATE},
-    widgets::{Block, Borders, Widget, WidgetRef},
+    widgets::{Block, Borders, Widget},
 };
 
 use crate::{
@@ -28,7 +28,7 @@ pub const MENU_HIGHLIGHT_STYLE: Style = Style::new()
     .fg(ratatui::style::Color::Green)
     .add_modifier(Modifier::BOLD);
 pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
-const THROTTLE_DURATION: Duration = Duration::from_millis(100);
+// const THROTTLE_DURATION: Duration = Duration::from_millis(100);
 
 #[derive(PartialEq, Eq)]
 pub enum AppAction {

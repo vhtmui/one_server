@@ -1,6 +1,5 @@
-use chrono::{DateTime, FixedOffset, NaiveTime, Utc};
-use mysql_async::{Conn, Opts, Pool};
-use mysql_async::{OptsBuilder, prelude::*};
+use chrono::{DateTime, FixedOffset, Utc};
+use mysql_async::{Conn, Opts, Pool, prelude::*};
 use std::env;
 use std::fmt::Debug;
 use std::fs;
@@ -107,7 +106,7 @@ mod db {
 pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
     let pool = db::init_pool().await;
     let mut file_infos = Vec::new();
-    let current_path = std::env::current_dir()?;
+    // let current_path = std::env::current_dir()?;
 
     for path in paths {
         if let Ok(info) = FileInfo::from_path(&path) {

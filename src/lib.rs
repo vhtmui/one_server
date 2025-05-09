@@ -3,7 +3,7 @@ pub mod cli;
 pub mod my_widgets;
 pub mod param;
 
-use param::{default_config_path};
+use param::default_config_path;
 use serde::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf};
 #[derive(Deserialize)]

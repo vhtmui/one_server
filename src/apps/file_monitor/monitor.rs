@@ -1,4 +1,4 @@
-use crate::{MyConfig, apps::file_monitor::maintainer, get_param, load_config, log};
+use crate::{apps::file_monitor::maintainer, load_config, log};
 
 use std::{
     panic,
@@ -12,10 +12,10 @@ use indexmap::IndexMap;
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
 use futures;
-use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher, poll};
+use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
 use smol::{
     fs,
-    future::{self, FutureExt},
+    future::{self},
     io::{AsyncBufReadExt, AsyncSeekExt, BufReader, SeekFrom},
     pin,
     stream::{self, StreamExt},
@@ -49,8 +49,6 @@ pub enum MonitorStatus {
     Error,
     Finished,
 }
-
-const MAX_FILES_WATCHED: usize = 12;
 
 #[derive(Default)]
 pub struct FileStatistics {

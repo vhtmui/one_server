@@ -6,11 +6,7 @@ pub mod menu_state;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    widgets::Block,
-};
+use ratatui::widgets::Block;
 use serde::{Deserialize, Serialize};
 
 // 定义一个辅助结构体，用于序列化和反序列化 MenuItem
@@ -95,7 +91,7 @@ impl<'a> MenuItem<'a> {
                 .collect(),
         }
     }
-    pub fn set_block(&mut self, block: Block<'a>){
+    pub fn set_block(&mut self, block: Block<'a>) {
         self.block = Some(block);
     }
 }

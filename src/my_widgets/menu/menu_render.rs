@@ -1,9 +1,13 @@
 use std::{cell::RefCell, rc::Rc};
 
 use ratatui::{
-    buffer::Buffer, layout::{Constraint, Direction, Layout, Rect}, prelude::BlockExt, style::{palette::material::YELLOW, Color::*, Modifier, Style, Styled}, widgets::{
+    buffer::Buffer,
+    layout::{Constraint, Direction, Rect},
+    prelude::BlockExt,
+    style::{Color::*, Modifier, Style},
+    widgets::{
         Block, Borders, List, ListState, StatefulWidget, StatefulWidgetRef, Widget, WidgetRef,
-    }
+    },
 };
 
 use crate::my_widgets::{
@@ -54,10 +58,6 @@ impl<'a> MenuItem<'a> {
     ) {
         Self::render_list(children, area, buf, index, MENU_SELECTED);
     }
-}
-
-impl<'a> WidgetRef for MenuItem<'a> {
-    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {}
 }
 
 impl<'a> StatefulWidgetRef for MenuItem<'a> {
