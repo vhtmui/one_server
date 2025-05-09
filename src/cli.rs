@@ -54,11 +54,10 @@ pub fn run_cli_mode() {
 
 fn into_filemonitor() {
     // 创建文件监控器
-    let path: MyConfig =
-        serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
+    let path = load_config().file_monitor.monitor_path;
     let mut file_monitor = FileMonitor::new(
         "file_monitor".to_string(),
-        path.file_monitor.monitor_path,
+        path,
         50,
     );
     loop {

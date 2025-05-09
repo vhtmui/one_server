@@ -1,8 +1,4 @@
-use crate::{
-    MyConfig,
-    apps::file_monitor::maintainer,
-    get_param, load_config, log,
-};
+use crate::{MyConfig, apps::file_monitor::maintainer, get_param, load_config, log};
 
 use std::{
     panic,
@@ -230,6 +226,20 @@ impl Monitor {
     }
 
     pub fn start_monitor(&mut self) -> Result<()> {
+        if !Path::new(&self.path).exists() {
+            let current_path = std::env::current_dir()?;
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                MonitorEventType::Error,
+                format!(
+                    "Start failed: path does not exist, current path: {}, please configure the path parameter in cfg.json ",
+                    current_path.display()
+                )
+            );
+            return Ok(());
+        }
+
         let ss = self.shared_state.lock().unwrap();
         if ss.status == Running {
             log!(
@@ -241,20 +251,6 @@ impl Monitor {
             return Ok(());
         }
         drop(ss);
-
-        if !Path::new(&self.path).exists() {
-            let current_path = std::env::current_dir()?;
-            log!(
-                self.shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
-                MonitorEventType::Error,
-                format!(
-                    "Path does not exist, current path: {}",
-                    current_path.display()
-                )
-            );
-            return Ok(());
-        }
 
         self.set_lunch_time();
         self.set_status(Running);

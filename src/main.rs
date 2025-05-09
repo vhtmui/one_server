@@ -38,13 +38,13 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path: MyConfig = load_config();
+    let path = load_config().file_monitor.monitor_path;
 
     let file_monitor = (
         String::from("file_monitor"),
         Box::new(FileMonitor::new(
             "file_monitor".to_string(),
-            path.file_monitor.monitor_path,
+            path,
             50,
         )),
     );

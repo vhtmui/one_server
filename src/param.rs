@@ -19,7 +19,7 @@ pub fn default_config_path() -> String {
     if cfg!(debug_assertions) {
         "asset/cfg.json".to_string()
     } else {
-        "/etc/one_server/cfg.json".to_string()
+        "cfg.json".to_string()
     }
 }
 

@@ -1,0 +1,65 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        // {
+        //     "type": "lldb",
+        //     "request": "launch",
+        //     "name": "Debug unit tests in library 'one_server'",
+        //     "cargo": {
+        //         "args": [
+        //             "test",
+        //             "--no-run",
+        //             "--lib",
+        //             "--package=one_server"
+        //         ],
+        //         "filter": {
+        //             "name": "one_server",
+        //             "kind": "lib"
+        //         }
+        //     },
+        //     "args": [],
+        //     "cwd": "${workspaceFolder}"
+        // },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'one_server'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=one_server",
+                    "--package=one_server"
+                ],
+                "filter": {
+                    "name": "one_server",
+                    "kind": "bin"
+                }
+            },
+            "args": ["--cli"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'one_server'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=one_server",
+                    "--package=one_server"
+                ],
+                "filter": {
+                    "name": "one_server",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
