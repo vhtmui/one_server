@@ -10,6 +10,7 @@
                 "\\",
                 "E:\\testdata\\"
             ]
-        }
+        },
+        "max_watch_files": 1000
     }
 }

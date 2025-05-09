@@ -1,4 +1,8 @@
-use crate::{MyConfig, apps::file_monitor::maintainer, log};
+use crate::{
+    MyConfig,
+    apps::file_monitor::maintainer,
+    get_param, load_config, log,
+};
 
 use std::{
     panic,
@@ -308,6 +312,7 @@ impl Monitor {
 
             let ss_clone2 = shared_state.clone();
             let iterate_future = async move {
+                let max_files_watched = load_config().file_monitor.max_watch_files;
                 'outer: loop {
                     match rx.recv_timeout(Duration::from_millis(500)) {
                         Ok(Ok(NotifyEvent {
@@ -332,7 +337,7 @@ impl Monitor {
                             let old_file_size = ss_clone2
                                 .lock()
                                 .unwrap()
-                                .update_file_watchinfo(&path)
+                                .update_file_watchinfo(&path, max_files_watched)
                                 .unwrap_or_default()
                                 .file_size;
 
@@ -490,12 +495,7 @@ impl Monitor {
         let path = path.replace('/', r#"\"#).replace('+', " ");
 
         // 读取配置
-        let cfg_path = PathBuf::from("asset/cfg.json");
-        let cfg_str = fs::read_to_string(&cfg_path)
-            .await
-            .expect("Failed to read cfg.json");
-        let config: MyConfig = serde_json::from_str(&cfg_str).expect("Invalid cfg.json format");
-        let prefix_map = &config.file_monitor.prefix_map_of_extract_path;
+        let prefix_map = load_config().file_monitor.prefix_map_of_extract_path;
 
         // 遍历所有映射，优先非"default"
         for (_key, pair) in prefix_map.iter().filter(|(k, _)| *k != "default") {
@@ -610,7 +610,11 @@ impl SharedState {
     }
 
     /// Set or init watch file's `FileStatistics` if not exist, and return the old value.
-    fn update_file_watchinfo(&mut self, path: &PathBuf) -> Option<FileWatchInfo> {
+    fn update_file_watchinfo(
+        &mut self,
+        path: &PathBuf,
+        max_files_watched: usize,
+    ) -> Option<FileWatchInfo> {
         let file_size = std::fs::metadata(path).unwrap().len();
 
         let file_watch_info = if let Some(info) = self.file_statistic.files_watched.get(path) {
@@ -627,7 +631,7 @@ impl SharedState {
 
         // 插入前检查容量，超出则移除最早的
         if !self.file_statistic.files_watched.contains_key(path)
-            && self.file_statistic.files_watched.len() >= MAX_FILES_WATCHED
+            && self.file_statistic.files_watched.len() >= max_files_watched
         {
             // 移除最早插入的项
             self.file_statistic.files_watched.shift_remove_index(0);
@@ -740,7 +744,7 @@ async fn test_extract_path() {
 }
 
 async fn extract_path(content: &str) -> PathBuf {
-    let base = std::env::temp_dir().join("test_asset");
+    let base = std::env::temp_dir().join("test_assdfasset");
     std::fs::create_dir_all(&base).unwrap();
     let file = base.join("fileasdfsfsadfasd");
     std::fs::write(&file, content).unwrap();
@@ -749,5 +753,6 @@ async fn extract_path(content: &str) -> PathBuf {
     pin!(extracted_paths);
 
     let path = extracted_paths.next().await.unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
     path.0
 }

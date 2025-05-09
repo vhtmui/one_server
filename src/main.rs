@@ -8,11 +8,9 @@ use ratatui::{
     prelude::CrosstermBackend,
     restore,
 };
-use serde::Deserialize;
 use serde_json;
 use smol_macros::main;
 
-use std::io::{self, Write};
 use std::{fs, io::stdout};
 
 fn set_panic_hook() {
@@ -24,17 +22,13 @@ fn set_panic_hook() {
 }
 
 use one_server::{
-    add_widgets, apps::{file_monitor::FileMonitor, Apps}, cli, MyConfig
+    apps::{Apps, file_monitor::FileMonitor},
+    *,
 };
 
 #[apply(main!)]
 async fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
-
-    if args.iter().any(|x| x == "--cli" || x == "-c") {
-        cli::run_cli_mode();
-        return;
-    }
+    param::handle_params();
 
     set_panic_hook();
     enable_raw_mode().unwrap();
@@ -44,8 +38,7 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path: MyConfig =
-        serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
+    let path: MyConfig = load_config();
 
     let file_monitor = (
         String::from("file_monitor"),

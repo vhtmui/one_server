@@ -6,7 +6,7 @@ use std::{
     vec,
 };
 
-use crate::{MyConfig, apps::file_monitor::FileMonitor};
+use crate::{MyConfig, apps::file_monitor::FileMonitor, get_param, *};
 
 // 命令常量定义
 pub const CMD_QUIT: &str = ":q";
@@ -154,7 +154,7 @@ fn help(cmds: Vec<&str>) {
         (CMD_START_MONITOR, (CMD_START_MONITOR, "开始监控")),
         (CMD_STOP_MONITOR, (CMD_STOP_MONITOR, "停止监控")),
         (CMD_START_SCAN, (CMD_START_SCAN, "开始扫描")),
-        (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录"))
+        (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录")),
     ]);
     println!("命令列表：");
 
