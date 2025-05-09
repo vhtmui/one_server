@@ -1,11 +1,8 @@
 use crate::{MyConfig, apps::file_monitor::maintainer, log};
 
 use std::{
-    collections::HashMap,
-    env::current_exe,
     panic,
     path::{Path, PathBuf},
-    result,
     sync::{Arc, Mutex, mpsc},
     thread,
     time::Duration,
@@ -53,7 +50,7 @@ pub enum MonitorStatus {
     Finished,
 }
 
-const MAX_FILES_WATCHED: usize = 1024;
+const MAX_FILES_WATCHED: usize = 12;
 
 #[derive(Default)]
 pub struct FileStatistics {
@@ -289,9 +286,7 @@ impl Monitor {
             // 设为轮询模式
             if let Some(duration) = poll_duration {
                 watcher
-                    .configure(
-                        notify::Config::default().with_poll_interval(duration),
-                    )
+                    .configure(notify::Config::default().with_poll_interval(duration))
                     .unwrap();
             }
             watcher.watch(&path, RecursiveMode::NonRecursive).unwrap();
