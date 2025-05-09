@@ -24,7 +24,7 @@ fn set_panic_hook() {
 }
 
 use one_server::{
-    add_widgets, apps::{file_monitor::FileMonitor, Apps}, cli, Config
+    add_widgets, apps::{file_monitor::FileMonitor, Apps}, cli, MyConfig
 };
 
 #[apply(main!)]
@@ -44,7 +44,7 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path: Config =
+    let path: MyConfig =
         serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
 
     let file_monitor = (

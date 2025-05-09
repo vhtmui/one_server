@@ -6,7 +6,7 @@ use std::{
     vec,
 };
 
-use crate::{Config, apps::file_monitor::FileMonitor};
+use crate::{MyConfig, apps::file_monitor::FileMonitor};
 
 // 命令常量定义
 pub const CMD_QUIT: &str = ":q";
@@ -54,7 +54,7 @@ pub fn run_cli_mode() {
 
 fn into_filemonitor() {
     // 创建文件监控器
-    let path: Config =
+    let path: MyConfig =
         serde_json::from_str(&fs::read_to_string("asset\\cfg.json").unwrap()).unwrap();
     let mut file_monitor = FileMonitor::new(
         "file_monitor".to_string(),

@@ -113,15 +113,15 @@ pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
         if let Ok(info) = FileInfo::from_path(&path) {
             file_infos.push(info);
         } else {
-            eprintln!();
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to read file metadata for {:?}, current path is {}",
-                    path,
-                    current_path.display(),
-                ),
-            ));
+            continue;
+            // return Err(Error::new(
+            //     std::io::ErrorKind::Other,
+            //     format!(
+            //         "Failed to read file metadata for {:?}, current path is {}",
+            //         path,
+            //         current_path.display(),
+            //     ),
+            // ));
         }
     }
 

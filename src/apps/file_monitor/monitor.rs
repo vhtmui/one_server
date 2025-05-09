@@ -1,4 +1,4 @@
-use crate::{Config, apps::file_monitor::maintainer, log};
+use crate::{MyConfig, apps::file_monitor::maintainer, log};
 
 use std::{
     collections::HashMap,
@@ -11,9 +11,11 @@ use std::{
     time::Duration,
 };
 
+use indexmap::IndexMap;
+
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
 use futures;
-use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
+use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher, poll};
 use smol::{
     fs,
     future::{self, FutureExt},
@@ -51,9 +53,11 @@ pub enum MonitorStatus {
     Finished,
 }
 
+const MAX_FILES_WATCHED: usize = 1024;
+
 #[derive(Default)]
 pub struct FileStatistics {
-    files_watched: HashMap<PathBuf, FileWatchInfo>,
+    files_watched: IndexMap<PathBuf, FileWatchInfo>,
     files_got: usize,
     files_recorded: usize,
     file_reading: PathBuf,
@@ -259,7 +263,7 @@ impl Monitor {
 
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let path = self.path.clone();
-        let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, path));
+        let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, path, None));
 
         self.handle = Some(handle);
 
@@ -273,10 +277,23 @@ impl Monitor {
     }
 
     // 线程中运行
-    fn inner_monitor(shared_state: Arc<Mutex<SharedState>>, path: PathBuf) -> Result<()> {
-        smol::block_on(async {
+    fn inner_monitor(
+        shared_state: Arc<Mutex<SharedState>>,
+        path: PathBuf,
+        poll_duration: Option<Duration>,
+    ) -> Result<()> {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
             let (tx, rx) = mpsc::channel::<Result<NotifyEvent>>();
             let mut watcher = notify::recommended_watcher(tx).unwrap();
+            // 设为轮询模式
+            if let Some(duration) = poll_duration {
+                watcher
+                    .configure(
+                        notify::Config::default().with_poll_interval(duration),
+                    )
+                    .unwrap();
+            }
             watcher.watch(&path, RecursiveMode::NonRecursive).unwrap();
 
             let ss_clone = shared_state.clone();
@@ -475,14 +492,14 @@ impl Monitor {
 
     async fn handle_pathstring(path: &str) -> PathBuf {
         // 转换为windows风格
-        let path = path.replace('/', r#"\"#);
+        let path = path.replace('/', r#"\"#).replace('+', " ");
 
         // 读取配置
         let cfg_path = PathBuf::from("asset/cfg.json");
         let cfg_str = fs::read_to_string(&cfg_path)
             .await
             .expect("Failed to read cfg.json");
-        let config: Config = serde_json::from_str(&cfg_str).expect("Invalid cfg.json format");
+        let config: MyConfig = serde_json::from_str(&cfg_str).expect("Invalid cfg.json format");
         let prefix_map = &config.file_monitor.prefix_map_of_extract_path;
 
         // 遍历所有映射，优先非"default"
@@ -613,6 +630,14 @@ impl SharedState {
             }
         };
 
+        // 插入前检查容量，超出则移除最早的
+        if !self.file_statistic.files_watched.contains_key(path)
+            && self.file_statistic.files_watched.len() >= MAX_FILES_WATCHED
+        {
+            // 移除最早插入的项
+            self.file_statistic.files_watched.shift_remove_index(0);
+        }
+
         self.file_statistic
             .files_watched
             .insert(path.clone(), file_watch_info.clone())
@@ -685,7 +710,7 @@ async fn test_path_construction() {
     );
     assert_eq!(
         PathBuf::from(
-            "E:\\testdata\\123\\  Starting Space\\Mix!@#$%^&()=+{}[];',~_目录\\Sub Folder 中间 空 格\\文件_🌟Unicode_引号_&_Sp  ecial_Chars_最终版_v2.0%20@2024"
+            "E:\\testdata\\123\\  Starting Space\\Mix!@#$%^&()= {}[];',~_目录\\Sub Folder 中间 空 格\\文件_🌟Unicode_引号_&_Sp  ecial_Chars_最终版_v2.0%20@2024"
         ),
         path_with_special_char
     );

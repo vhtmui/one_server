@@ -12,12 +12,12 @@ pub struct FileMonitorConfig {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
+pub struct MyConfig {
     pub file_monitor: FileMonitorConfig,
 }
 
 #[test]
 fn test_config() {
     let config_str = fs::read_to_string("asset/cfg.json").unwrap();
-    let _config: Config = serde_json::from_str(&config_str).unwrap();
+    let _config: MyConfig = serde_json::from_str(&config_str).unwrap();
 }
