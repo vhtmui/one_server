@@ -20,7 +20,7 @@ use crate::{
     my_widgets::{MyWidgets, get_center_rect},
 };
 
-pub mod file_monitor;
+pub mod file_sync_manager;
 
 pub const MENU_SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
 pub const MENU_HIGHLIGHT_STYLE: Style = Style::new()
@@ -95,7 +95,7 @@ impl Apps {
                 }
             }
 
-            thread::sleep(Duration::from_millis(33));
+            // thread::sleep(Duration::from_millis(33));
         }
 
         Ok(true)

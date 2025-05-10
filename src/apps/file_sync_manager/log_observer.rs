@@ -1,4 +1,4 @@
-use crate::{apps::file_monitor::maintainer, load_config, log};
+use crate::{apps::file_sync_manager::registry, load_config, log};
 
 use std::{
     panic,
@@ -22,11 +22,11 @@ use smol::{
 };
 use walkdir::WalkDir;
 
-use crate::{apps::file_monitor::MonitorStatus::*, my_widgets::wrap_list::WrapList};
+use crate::{apps::file_sync_manager::MonitorStatus::*, my_widgets::wrap_list::WrapList};
 
 pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
-pub struct Monitor {
+pub struct LogObserver {
     pub path: PathBuf,
     pub shared_state: Arc<Mutex<SharedState>>,
     pub handle: Option<thread::JoinHandle<Result<()>>>,
@@ -82,7 +82,7 @@ pub enum MonitorEventType {
     Scanner,
 }
 
-impl Monitor {
+impl LogObserver {
     pub fn new(path: PathBuf, log_size: usize) -> Self {
         let shared_state = Arc::new(Mutex::new(SharedState {
             launch_time: DateTime::from_timestamp(0, 0)
@@ -95,7 +95,7 @@ impl Monitor {
             scanner_status: Stopped,
         }));
 
-        Monitor {
+        LogObserver {
             path,
             shared_state,
             handle: None,
@@ -121,7 +121,7 @@ impl Monitor {
         let handle = thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                Monitor::scan_and_update_dir(ss_clone2, &path).await?;
+                LogObserver::scan_and_update_dir(ss_clone2, &path).await?;
                 Ok::<(), std::io::Error>(())
             })?;
             Ok::<(), std::io::Error>(())
@@ -180,7 +180,7 @@ impl Monitor {
         );
 
         // 调用数据库更新
-        maintainer::process_paths(files).await?;
+        registry::process_paths(files).await?;
 
         log!(
             shared_state,
@@ -258,7 +258,7 @@ impl Monitor {
 
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let path = self.path.clone();
-        let handle = thread::spawn(move || Monitor::inner_monitor(cloned_shared_state, path, None));
+        let handle = thread::spawn(move || LogObserver::inner_monitor(cloned_shared_state, path, None));
 
         self.handle = Some(handle);
 
@@ -382,7 +382,7 @@ impl Monitor {
 
                                 let paths: Vec<PathBuf> =
                                     paths_and_offset.iter().map(|f| f.0.clone()).collect();
-                                maintainer::process_paths(paths).await.unwrap();
+                                registry::process_paths(paths).await.unwrap();
 
                                 // the offset is the file's size
                                 let offset = file_size;
@@ -678,14 +678,14 @@ macro_rules! log {
 
 #[tokio::test]
 async fn test_path_construction() {
-    let path = Monitor::handle_pathstring("/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT").await;
+    let path = LogObserver::handle_pathstring("/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT").await;
 
-    let path_ac03 = Monitor::handle_pathstring("/AC03/ASDFDSAFDSA.csv").await;
+    let path_ac03 = LogObserver::handle_pathstring("/AC03/ASDFDSAFDSA.csv").await;
 
-    let path_with_whitespace = Monitor::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv").await;
+    let path_with_whitespace = LogObserver::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv").await;
 
     // windows iis ftp日志会将路径中间的空格替换为`+`号，将`+`不做处理
-    let path_with_special_char = Monitor::handle_pathstring("/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024").await;
+    let path_with_special_char = LogObserver::handle_pathstring("/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024").await;
 
     assert_eq!(
         PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"),
@@ -743,7 +743,7 @@ async fn extract_path(content: &str) -> PathBuf {
     let file = base.join("fileasdfsfsadfasd");
     std::fs::write(&file, content).unwrap();
 
-    let extracted_paths = Monitor::extract_path_stream(&file, 0).await;
+    let extracted_paths = LogObserver::extract_path_stream(&file, 0).await;
     pin!(extracted_paths);
 
     let path = extracted_paths.next().await.unwrap();

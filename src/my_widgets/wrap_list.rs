@@ -10,7 +10,7 @@ use textwrap::WordSplitter;
 
 use crate::apps::{
     MENU_HIGHLIGHT_STYLE,
-    file_monitor::{MonitorEvent, MonitorEventType},
+    file_sync_manager::{MonitorEvent, MonitorEventType},
 };
 
 pub struct WrapList {

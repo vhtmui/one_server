@@ -1,7 +1,9 @@
-pub mod maintainer;
-pub mod monitor;
+pub mod registry;
+pub mod log_observer;
+pub mod dir_scanner;
 
-pub use monitor::*;
+pub use log_observer::*;
+pub use dir_scanner::*;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -22,7 +24,7 @@ use crate::my_widgets::render_input_popup;
 use crate::{
     apps::{
         AppAction::{self, *},
-        file_monitor::monitor::MonitorStatus::*,
+        file_sync_manager::log_observer::MonitorStatus::*,
     },
     my_widgets::{
         MyWidgets, dichotomize_area_with_midlines,
@@ -95,24 +97,24 @@ impl CurrentArea {
     }
 }
 
-pub struct FileMonitor {
+pub struct SyncEngine {
     title: String,
     menu_struct: SerializableMenuItem,
     menu_state: RefCell<MenuState>,
-    pub monitor: Monitor,
+    pub monitor: LogObserver,
     log_list_state: RefCell<ListState>,
     input_content: String,
     current_area: CurrentArea,
 }
 
-impl FileMonitor {
+impl SyncEngine {
     pub fn new(title: String, path: PathBuf, log_size: usize) -> Self {
         let menu_struct = serde_json::from_str(MENU_JSON).unwrap();
-        FileMonitor {
+        SyncEngine {
             menu_state: RefCell::new(MenuState::default()),
             title,
             menu_struct,
-            monitor: Monitor::new(path, log_size),
+            monitor: LogObserver::new(path, log_size),
             log_list_state: RefCell::new(ListState::default()),
             current_area: CurrentArea::ControlPanelArea,
             input_content: String::new(),
@@ -238,7 +240,7 @@ impl FileMonitor {
     }
 }
 
-impl WidgetRef for FileMonitor {
+impl WidgetRef for SyncEngine {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let (left_area, _midline, right_area) = dichotomize_area_with_midlines(
             area,
@@ -270,7 +272,7 @@ impl WidgetRef for FileMonitor {
     }
 }
 
-impl MyWidgets for FileMonitor {
+impl MyWidgets for SyncEngine {
     fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error> {
         // if in menu area
         match self.current_area {

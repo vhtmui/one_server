@@ -6,7 +6,7 @@ use std::fs;
 use std::io::Error;
 use std::path::PathBuf;
 
-use super::monitor::TIME_ZONE;
+use super::log_observer::TIME_ZONE;
 
 #[derive(Debug, Clone)]
 struct FileInfo {

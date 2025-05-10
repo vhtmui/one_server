@@ -10,7 +10,7 @@ use ratatui::{
 };
 use smol_macros::main;
 
-use std::{fs, io::stdout};
+use std::io::stdout;
 
 fn set_panic_hook() {
     let hook = std::panic::take_hook();
@@ -21,7 +21,7 @@ fn set_panic_hook() {
 }
 
 use one_server::{
-    apps::{Apps, file_monitor::FileMonitor},
+    apps::{Apps, file_sync_manager::SyncEngine},
     *,
 };
 
@@ -41,11 +41,7 @@ async fn main() {
 
     let file_monitor = (
         String::from("file_monitor"),
-        Box::new(FileMonitor::new(
-            "file_monitor".to_string(),
-            path,
-            50,
-        )),
+        Box::new(SyncEngine::new("file_monitor".to_string(), path, 50)),
     );
 
     add_widgets!(app, file_monitor)
