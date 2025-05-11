@@ -22,7 +22,7 @@ use smol::{
 };
 use walkdir::WalkDir;
 
-use crate::{apps::file_sync_manager::MonitorStatus::*, my_widgets::wrap_list::WrapList};
+use crate::{apps::file_sync_manager::MonitorStatus::*, my_widgets::wrap_list::WrapList, Event};
 
 pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 

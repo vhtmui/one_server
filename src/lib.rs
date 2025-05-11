@@ -3,9 +3,11 @@ pub mod cli;
 pub mod my_widgets;
 pub mod param;
 
+use chrono::{DateTime, FixedOffset};
 use param::default_config_path;
 use serde::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf};
+
 #[derive(Deserialize)]
 pub struct FileMonitorConfig {
     pub prefix_map_of_extract_path: HashMap<String, [String; 2]>,
@@ -17,6 +19,7 @@ pub struct FileMonitorConfig {
 pub struct MyConfig {
     pub file_monitor: FileMonitorConfig,
 }
+
 pub fn load_config() -> MyConfig {
     let path = get_param(param::PARAM_CONFIG_PATH);
 
@@ -50,6 +53,34 @@ pub fn get_param(param: &str) -> Option<String> {
         }
         None
     }
+}
+
+pub struct Event {
+    kind: EventKind,
+    content: String,
+    time: Option<DateTime<FixedOffset>>,
+}
+
+pub enum EventKind {
+    LogObserverEvent(LogObserverEvent),
+    DirScannerEvent(DirScannerEvent),
+}
+
+pub enum LogObserverEvent {
+    Stop,
+    Error,
+    CreatedFile,
+    ModifiedFile,
+    DeletedFile,
+    Info,
+}
+
+pub enum DirScannerEvent {
+    Start,
+    Stop,
+    Complete,
+    Error,
+    Info,
 }
 
 #[test]
