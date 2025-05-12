@@ -1,9 +1,9 @@
-pub mod registry;
-pub mod log_observer;
 pub mod dir_scanner;
+pub mod log_observer;
+pub mod registry;
 
-pub use log_observer::*;
 pub use dir_scanner::*;
+pub use log_observer::*;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -234,7 +234,7 @@ impl SyncEngine {
     }
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
-        let list = &mut self.monitor.shared_state.lock().unwrap().logs;
+        let list = &mut self.monitor.get_logs_widget();
 
         StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
     }

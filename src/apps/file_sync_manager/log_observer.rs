@@ -27,17 +27,16 @@ pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
 pub struct LogObserver {
     pub path: PathBuf,
-    pub shared_state: Arc<Mutex<SharedState>>,
+    shared_state: Arc<Mutex<SharedState>>,
     pub handle: Option<thread::JoinHandle<Result<()>>>,
 }
 
-pub struct SharedState {
+struct SharedState {
     pub launch_time: DateTime<FixedOffset>,
     pub elapsed_time: TimeDelta,
     pub status: ObserverStatus,
     pub file_statistic: FileStatistics,
     pub logs: WrapList,
-    pub scanner_status: ObserverStatus,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -70,7 +69,6 @@ impl LogObserver {
             status: Stopped,
             file_statistic: FileStatistics::default(),
             logs: WrapList::new(log_size),
-            scanner_status: Stopped,
         }));
 
         LogObserver {
@@ -438,10 +436,6 @@ impl LogObserver {
         self.shared_state.lock().unwrap().get_status()
     }
 
-    pub fn get_scanner_status(&self) -> ObserverStatus {
-        self.shared_state.lock().unwrap().get_scanner_status()
-    }
-
     pub fn files_got(&self) -> usize {
         self.shared_state.lock().unwrap().file_statistic.files_got
     }
@@ -472,6 +466,10 @@ impl LogObserver {
                 format!("{}", text)
             })
             .collect()
+    }
+
+    pub fn get_logs_widget(&self) -> WrapList {
+        self.shared_state.lock().unwrap().logs.clone()
     }
 
     fn set_panic_hook(shared_state: Arc<Mutex<SharedState>>) {
@@ -540,14 +538,6 @@ impl SharedState {
 
     fn set_status(&mut self, status: ObserverStatus) {
         self.status = status;
-    }
-
-    fn get_scanner_status(&self) -> ObserverStatus {
-        self.scanner_status.clone()
-    }
-
-    fn set_scanner_status(&mut self, status: ObserverStatus) {
-        self.scanner_status = status;
     }
 
     fn set_files_reading(&mut self, path: &PathBuf) {

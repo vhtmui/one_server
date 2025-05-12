@@ -13,6 +13,7 @@ use crate::{
     apps::MENU_HIGHLIGHT_STYLE,
 };
 
+#[derive(Clone)]
 pub struct WrapList {
     pub raw_list: VecDeque<OneEvent>,
     pub list: VecDeque<ListItem<'static>>,
@@ -40,6 +41,7 @@ impl WrapList {
                 LOE::ModifiedFile => ("[MODIFY]", Color::Blue),
                 LOE::DeletedFile => ("[DELETE]", Color::Magenta),
                 LOE::Info => ("[INFO]  ", Color::Magenta),
+                LOE::Start => ("[START]  ", Color::Cyan),
                 LOE::Stop => ("[STOP]  ", Color::Red),
             },
 

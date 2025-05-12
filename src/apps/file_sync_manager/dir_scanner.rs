@@ -1,12 +1,38 @@
-use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}, thread};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    thread,
+};
 
 use walkdir::WalkDir;
 
-use crate::apps::file_sync_manager::registry;
+use crate::{apps::file_sync_manager::registry, my_widgets::wrap_list::WrapList};
+use DirScannerStatus::*;
 
-pub struct DirScanner {}
+pub struct DirScanner {
+    shared_state: Arc<Mutex<SharedState>>,
+}
+
+struct SharedState {
+    logs: WrapList,
+    pub scanner_status: DirScannerStatus,
+}
+
+#[derive(PartialEq, Eq)]
+enum DirScannerStatus {
+    Running,
+}
 
 impl DirScanner {
+    pub fn new() -> Self {
+        Self {
+            shared_state: Arc::new(Mutex::new(SharedState {
+                logs: WrapList::new(100),
+                scanner_status: DirScannerStatus::Stopped,
+            })),
+        }
+    }
+
     pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
         if self.shared_state.lock().unwrap().scanner_status == Running {
             log!(
@@ -17,8 +43,6 @@ impl DirScanner {
             );
             return Ok(());
         }
-
-        let shared_state = self.shared_state.clone();
 
         shared_state.lock().unwrap().set_scanner_status(Running);
 
