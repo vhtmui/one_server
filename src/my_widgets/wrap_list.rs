@@ -8,13 +8,13 @@ use ratatui::{
 };
 use textwrap::WordSplitter;
 
-use crate::apps::{
-    MENU_HIGHLIGHT_STYLE,
-    file_sync_manager::{MonitorEvent, MonitorEventType},
+use crate::{
+    DirScannerEventKind as DSE, EventKind::*, LogObserverEventKind as LOE, OneEvent,
+    apps::MENU_HIGHLIGHT_STYLE,
 };
 
 pub struct WrapList {
-    pub raw_list: VecDeque<MonitorEvent>,
+    pub raw_list: VecDeque<OneEvent>,
     pub list: VecDeque<ListItem<'static>>,
     pub wrap_len: Option<usize>,
     dictionary: Standard,
@@ -32,15 +32,24 @@ impl WrapList {
         }
     }
 
-    pub fn create_text(e: &MonitorEvent) -> (&str, String, Color) {
-        let (prefix, color) = match e.event_type {
-            MonitorEventType::Error => ("[ERR]  ", Color::Red),
-            MonitorEventType::CreatedFile => ("[CREATE]", Color::Green),
-            MonitorEventType::ModifiedFile => ("[MODIFY]", Color::Blue),
-            MonitorEventType::DeletedFile => ("[DELETE]", Color::Magenta),
-            MonitorEventType::StopMonitor => ("[STOP]", Color::Yellow),
-            MonitorEventType::Info => ("[INFO]  ", Color::Magenta),
-            MonitorEventType::Scanner => ("[SCAN]  ", Color::Cyan),
+    pub fn create_text(e: &OneEvent) -> (&str, String, Color) {
+        let (prefix, color) = match &e.kind {
+            LogObserverEvent(l) => match l {
+                LOE::Error => ("[ERR]  ", Color::Red),
+                LOE::CreatedFile => ("[CREATE]", Color::Green),
+                LOE::ModifiedFile => ("[MODIFY]", Color::Blue),
+                LOE::DeletedFile => ("[DELETE]", Color::Magenta),
+                LOE::Info => ("[INFO]  ", Color::Magenta),
+                LOE::Stop => ("[STOP]  ", Color::Red),
+            },
+
+            DirScannerEvent(d) => match d {
+                DSE::Start => ("[SCAN]  ", Color::Cyan),
+                DSE::Stop => ("[STOP]  ", Color::Yellow),
+                DSE::Complete => ("[COMPLETE]", Color::Green),
+                DSE::Error => ("[ERR]  ", Color::Red),
+                DSE::Info => ("[INFO]  ", Color::Magenta),
+            },
         };
 
         let time_str = e
@@ -48,12 +57,12 @@ impl WrapList {
             .map(|t| t.format("%H:%M:%S").to_string())
             .unwrap_or_else(|| "--:--:--".into());
 
-        let text = format!("{prefix} {time_str} {}", e.message);
+        let text = format!("{prefix} {time_str} {}", e.content);
         (prefix, text, color)
     }
 
     /// Create a ListItem from a MonitorEvent, use `self.wrap_len`` and `self.dictionary` to wrap the text.
-    fn create_list_item(&self, e: &MonitorEvent) -> ListItem<'static> {
+    fn create_list_item(&self, e: &OneEvent) -> ListItem<'static> {
         let (prefix, text, color) = Self::create_text(e);
 
         let options = textwrap::Options::new(self.wrap_len.unwrap_or(usize::MAX))
@@ -87,7 +96,7 @@ impl WrapList {
     }
 
     /// Add ListItem to `self.list`.
-    pub fn add_item(&mut self, e: MonitorEvent) {
+    pub fn add_item(&mut self, e: OneEvent) {
         let item = self.create_list_item(&e);
         self.list.push_front(item);
         if self.list.len() > self.wrap_len.unwrap_or(500) {
@@ -106,7 +115,7 @@ impl WrapList {
     }
 
     /// Add raw item of MonitorEvent to `self.raw_list`.
-    pub fn add_raw_item(&mut self, item: MonitorEvent) {
+    pub fn add_raw_item(&mut self, item: OneEvent) {
         let max_len = self.wrap_len.unwrap_or(500);
         if self.list.len() == max_len {
             self.raw_list.pop_back();

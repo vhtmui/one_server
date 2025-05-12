@@ -1,5 +1,3 @@
-use crate::{apps::file_sync_manager::registry, load_config, log};
-
 use std::{
     panic,
     path::{Path, PathBuf},
@@ -20,9 +18,10 @@ use smol::{
     pin,
     stream::{self, StreamExt},
 };
-use walkdir::WalkDir;
 
-use crate::{apps::file_sync_manager::MonitorStatus::*, my_widgets::wrap_list::WrapList, Event};
+use crate::{
+    apps::file_sync_manager::{registry, ObserverStatus::*}, load_config, log, my_widgets::wrap_list::WrapList, OneEvent, EK::*, LOE::*
+};
 
 pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
@@ -35,19 +34,16 @@ pub struct LogObserver {
 pub struct SharedState {
     pub launch_time: DateTime<FixedOffset>,
     pub elapsed_time: TimeDelta,
-    pub status: MonitorStatus,
+    pub status: ObserverStatus,
     pub file_statistic: FileStatistics,
     pub logs: WrapList,
-    pub scanner_status: MonitorStatus,
+    pub scanner_status: ObserverStatus,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum MonitorStatus {
+pub enum ObserverStatus {
     Running,
     Stopped,
-    Paused,
-    Error,
-    Finished,
 }
 
 #[derive(Default)]
@@ -62,24 +58,6 @@ pub struct FileStatistics {
 pub struct FileWatchInfo {
     last_read_pos: u64,
     file_size: u64,
-}
-
-#[derive(Clone, Debug)]
-pub struct MonitorEvent {
-    pub time: Option<DateTime<FixedOffset>>,
-    pub event_type: MonitorEventType,
-    pub message: String,
-}
-
-#[derive(Clone, Debug)]
-pub enum MonitorEventType {
-    StopMonitor,
-    Error,
-    CreatedFile,
-    ModifiedFile,
-    DeletedFile,
-    Info,
-    Scanner,
 }
 
 impl LogObserver {
@@ -102,95 +80,6 @@ impl LogObserver {
         }
     }
 
-    pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
-        if self.shared_state.lock().unwrap().scanner_status == Running {
-            log!(
-                self.shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
-                MonitorEventType::Scanner,
-                "Scanner already running".to_string()
-            );
-            return Ok(());
-        }
-
-        let shared_state = self.shared_state.clone();
-
-        shared_state.lock().unwrap().set_scanner_status(Running);
-
-        let ss_clone2 = shared_state.clone();
-        let handle = thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                LogObserver::scan_and_update_dir(ss_clone2, &path).await?;
-                Ok::<(), std::io::Error>(())
-            })?;
-            Ok::<(), std::io::Error>(())
-        });
-
-        log!(
-            shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
-            MonitorEventType::Scanner,
-            "Scanner started".to_string()
-        );
-
-        let future = async move {
-            loop {
-                if handle.is_finished() {
-                    shared_state.lock().unwrap().set_scanner_status(Finished);
-                    let handle_result = handle.join().unwrap();
-
-                    log!(
-                        shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        MonitorEventType::Scanner,
-                        format!("Scanner finished with {:?}", handle_result)
-                    );
-                    break;
-                }
-
-                smol::future::yield_now().await;
-            }
-        };
-
-        smol::spawn(future).detach();
-        Ok(())
-    }
-
-    pub async fn scan_and_update_dir(
-        shared_state: Arc<Mutex<SharedState>>,
-        dir: &Path,
-    ) -> std::io::Result<()> {
-        // 递归收集所有文件路径
-        let files: Vec<PathBuf> = WalkDir::new(dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-            .map(|e| e.path().to_path_buf())
-            .collect();
-
-        log!(
-            shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
-            MonitorEventType::Scanner,
-            format!(
-                "Found {} files in the directory. Executing insert...",
-                files.len()
-            )
-        );
-
-        // 调用数据库更新
-        registry::process_paths(files).await?;
-
-        log!(
-            shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
-            MonitorEventType::Scanner,
-            "DB update finished.".to_string()
-        );
-        Ok(())
-    }
-
     pub fn stop_monitor(&mut self) {
         if self.shared_state.lock().unwrap().status == Stopped {
             return;
@@ -199,7 +88,7 @@ impl LogObserver {
         self.shared_state
             .lock()
             .unwrap()
-            .set_status(MonitorStatus::Stopped);
+            .set_status(ObserverStatus::Stopped);
 
         thread::sleep(Duration::from_millis(800));
 
@@ -209,14 +98,14 @@ impl LogObserver {
                 log!(
                     self.shared_state,
                     Utc::now().with_timezone(TIME_ZONE),
-                    MonitorEventType::StopMonitor,
+                    LogObserverEvent(Stop),
                     "Monitor is stopping.".to_string()
                 );
             } else {
                 log!(
                     self.shared_state,
                     Utc::now().with_timezone(TIME_ZONE),
-                    MonitorEventType::Error,
+                    LogObserverEvent(Error),
                     "Monitor doesn't stop.".to_string()
                 );
             }
@@ -229,7 +118,7 @@ impl LogObserver {
             log!(
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
-                MonitorEventType::Error,
+                LogObserverEvent(Error),
                 format!(
                     "Start failed: path does not exist, current path: {}, please configure the path parameter in cfg.json ",
                     current_path.display()
@@ -243,7 +132,7 @@ impl LogObserver {
             log!(
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
-                MonitorEventType::Error,
+                LogObserverEvent(Error),
                 "Monitor is already running".to_string()
             );
             return Ok(());
@@ -258,14 +147,15 @@ impl LogObserver {
 
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let path = self.path.clone();
-        let handle = thread::spawn(move || LogObserver::inner_monitor(cloned_shared_state, path, None));
+        let handle =
+            thread::spawn(move || LogObserver::inner_monitor(cloned_shared_state, path, None));
 
         self.handle = Some(handle);
 
         log!(
             self.shared_state,
             Utc::now().with_timezone(TIME_ZONE),
-            MonitorEventType::Info,
+            LogObserverEvent(Start),
             "Monitor started".to_string()
         );
         Ok(())
@@ -317,7 +207,7 @@ impl LogObserver {
                             log!(
                                 ss_clone2,
                                 Utc::now().with_timezone(TIME_ZONE),
-                                MonitorEventType::ModifiedFile,
+                                LogObserverEvent(ModifiedFile),
                                 format!(
                                     "Notify event: {:?}, {:?}",
                                     EventKind::Modify(ckind),
@@ -347,7 +237,7 @@ impl LogObserver {
                             log!(
                                 ss_clone2,
                                 Utc::now().with_timezone(TIME_ZONE),
-                                MonitorEventType::Info,
+                                LogObserverEvent(Info),
                                 format!(
                                     "File watched updated from {} bytes to {}",
                                     old_file_size, current_file_size
@@ -407,7 +297,7 @@ impl LogObserver {
                                 log!(
                                     ss_clone2,
                                     Utc::now().with_timezone(TIME_ZONE),
-                                    MonitorEventType::ModifiedFile,
+                                    LogObserverEvent(Info),
                                     format!("Read {} bytes from file {:?}", bytes_read, path)
                                 );
 
@@ -423,7 +313,7 @@ impl LogObserver {
                             log!(
                                 ss_clone2,
                                 Utc::now().with_timezone(TIME_ZONE),
-                                MonitorEventType::Error,
+                                LogObserverEvent(Error),
                                 format!("Error: {:?}", e)
                             );
                             break;
@@ -437,7 +327,7 @@ impl LogObserver {
             log!(
                 shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
-                MonitorEventType::Info,
+                LogObserverEvent(Stop),
                 "Monitor stopped".to_string()
             );
 
@@ -540,15 +430,15 @@ impl LogObserver {
         ss.elapsed_time = TimeDelta::zero();
     }
 
-    pub fn set_status(&self, status: MonitorStatus) {
+    pub fn set_status(&self, status: ObserverStatus) {
         self.shared_state.lock().unwrap().set_status(status);
     }
 
-    pub fn get_status(&self) -> MonitorStatus {
+    pub fn get_status(&self) -> ObserverStatus {
         self.shared_state.lock().unwrap().get_status()
     }
 
-    pub fn get_scanner_status(&self) -> MonitorStatus {
+    pub fn get_scanner_status(&self) -> ObserverStatus {
         self.shared_state.lock().unwrap().get_scanner_status()
     }
 
@@ -589,7 +479,7 @@ impl LogObserver {
             log!(
                 shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
-                MonitorEventType::Error,
+                LogObserverEvent(Error),
                 format!("Thread panicked: {:?}", panic_info)
             );
             let mut ss = shared_state.lock().unwrap();
@@ -599,7 +489,7 @@ impl LogObserver {
 }
 
 impl SharedState {
-    fn add_logs(&mut self, event: MonitorEvent) {
+    fn add_logs(&mut self, event: OneEvent) {
         self.logs.add_raw_item(event);
     }
 
@@ -644,19 +534,19 @@ impl SharedState {
         self.file_statistic.files_got += num;
     }
 
-    fn get_status(&self) -> MonitorStatus {
+    fn get_status(&self) -> ObserverStatus {
         self.status.clone()
     }
 
-    fn set_status(&mut self, status: MonitorStatus) {
+    fn set_status(&mut self, status: ObserverStatus) {
         self.status = status;
     }
 
-    fn get_scanner_status(&self) -> MonitorStatus {
+    fn get_scanner_status(&self) -> ObserverStatus {
         self.scanner_status.clone()
     }
 
-    fn set_scanner_status(&mut self, status: MonitorStatus) {
+    fn set_scanner_status(&mut self, status: ObserverStatus) {
         self.scanner_status = status;
     }
 
@@ -667,11 +557,11 @@ impl SharedState {
 
 #[macro_export]
 macro_rules! log {
-    ($shared_state:expr, $time:expr, $event_type:expr, $message:expr $(,)* ) => {
-        $shared_state.lock().unwrap().add_logs(MonitorEvent {
+    ($shared_state:expr, $time:expr, $kind:expr, $content:expr $(,)* ) => {
+        $shared_state.lock().unwrap().add_logs(OneEvent {
             time: Some($time),
-            event_type: $event_type,
-            message: $message,
+            kind: $kind,
+            content: $content,
         })
     };
 }

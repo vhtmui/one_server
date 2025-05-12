@@ -3,6 +3,10 @@ pub mod cli;
 pub mod my_widgets;
 pub mod param;
 
+pub use LogObserverEventKind as LOE;
+pub use DirScannerEventKind as DSE;
+pub use EventKind as EK;
+
 use chrono::{DateTime, FixedOffset};
 use param::default_config_path;
 use serde::Deserialize;
@@ -55,27 +59,32 @@ pub fn get_param(param: &str) -> Option<String> {
     }
 }
 
-pub struct Event {
+#[derive(Debug, Clone)]
+pub struct OneEvent {
     kind: EventKind,
     content: String,
     time: Option<DateTime<FixedOffset>>,
 }
 
+#[derive(Debug, Clone)]
 pub enum EventKind {
-    LogObserverEvent(LogObserverEvent),
-    DirScannerEvent(DirScannerEvent),
+    LogObserverEvent(LogObserverEventKind),
+    DirScannerEvent(DirScannerEventKind),
 }
 
-pub enum LogObserverEvent {
+#[derive(Debug, Clone)]
+pub enum LogObserverEventKind {
     Stop,
     Error,
     CreatedFile,
     ModifiedFile,
     DeletedFile,
     Info,
+    Start,
 }
 
-pub enum DirScannerEvent {
+#[derive(Debug, Clone)]
+pub enum DirScannerEventKind {
     Start,
     Stop,
     Complete,

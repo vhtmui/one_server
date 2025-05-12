@@ -24,7 +24,7 @@ use crate::my_widgets::render_input_popup;
 use crate::{
     apps::{
         AppAction::{self, *},
-        file_sync_manager::log_observer::MonitorStatus::*,
+        file_sync_manager::log_observer::ObserverStatus::*,
     },
     my_widgets::{
         MyWidgets, dichotomize_area_with_midlines,
