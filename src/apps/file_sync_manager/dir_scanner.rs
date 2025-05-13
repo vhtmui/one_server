@@ -47,6 +47,16 @@ impl DirScanner {
     }
 
     pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
+        if !path.exists() {
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                DirScannerEvent(Error),
+                format!("Path does not exist: {}", path.display())
+            );
+            return Ok(());
+        }
+
         if self.shared_state.lock().unwrap().scanner_status == Running {
             log!(
                 self.shared_state,

@@ -16,7 +16,7 @@ pub const CMD_START_MONITOR: &str = "start mo";
 pub const CMD_STOP_MONITOR: &str = "stop mo";
 pub const CMD_START_SCAN: &str = "start sc";
 pub const CMD_SHOW_STATUS: &str = "ds status";
-pub const CMD_SHOW_LOGS: &str = "ds logs";
+pub const CMD_SHOW_LOGS: &str = "ds log";
 pub const CMD_INPUT_DIR: &str = "<dir>";
 
 fn read_trimmed_line(prompt: &str) -> Option<String> {
@@ -43,10 +43,7 @@ pub fn run_cli_mode() {
                 help(vec![CMD_INTO_FILEMONITOR]);
             }
             CMD_INTO_FILEMONITOR => {
-                into_filemonitor();
-            }
-            CMD_SHOW_LOGS => {
-                println!("日志：");
+                into_file_sync_mgr();
             }
             "" => {}
             _ => println!("未知命令，输入 help 查看帮助"),
@@ -55,7 +52,7 @@ pub fn run_cli_mode() {
     println!("已退出命令行模式。");
 }
 
-fn into_filemonitor() {
+fn into_file_sync_mgr() {
     // 创建文件监控器
     let path = load_config().file_sync_manager.observed_path;
     let mut file_sync_manager = SyncEngine::new("file_monitor".to_string(), path, 50);
@@ -68,13 +65,13 @@ fn into_filemonitor() {
             CMD_QUIT => break,
             CMD_HELP => {
                 help(vec![
+                    CMD_QUIT,
+                    CMD_HELP,
                     CMD_SHOW_STATUS,
                     CMD_SHOW_LOGS,
                     CMD_START_SCAN,
                     CMD_START_MONITOR,
                     CMD_STOP_MONITOR,
-                    CMD_QUIT,
-                    CMD_HELP,
                 ]);
             }
             CMD_SHOW_STATUS => {
