@@ -12,16 +12,18 @@ use param::default_config_path;
 use serde::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf};
 
-#[derive(Deserialize)]
-pub struct FileMonitorConfig {
-    pub prefix_map_of_extract_path: HashMap<String, [String; 2]>,
-    pub monitor_path: PathBuf,
-    pub max_watch_files: usize,
-}
+pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
 
 #[derive(Deserialize)]
 pub struct MyConfig {
-    pub file_monitor: FileMonitorConfig,
+    pub file_sync_manager: FileMonitorConfig,
+}
+
+#[derive(Deserialize)]
+pub struct FileMonitorConfig {
+    pub prefix_map_of_extract_path: HashMap<String, [String; 2]>,
+    pub observed_path: PathBuf,
+    pub max_observed_files: usize,
 }
 
 pub fn load_config() -> MyConfig {
@@ -90,6 +92,15 @@ pub enum DirScannerEventKind {
     Complete,
     Error,
     Info,
+    DBInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProgressStatus {
+    Running,
+    Stopped,
+    Finished,
+    Failed,
 }
 
 #[test]

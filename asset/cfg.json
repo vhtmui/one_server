@@ -1,6 +1,6 @@
 {
-    "file_monitor": {
-        "monitor_path": "C:\\inetpub\\logs\\LogFiles\\FTPSVC2",
+    "file_sync_manager": {
+        "observed_path": "C:\\inetpub\\logs\\LogFiles\\FTPSVC2",
         "prefix_map_of_extract_path": {
             "ac03": [
                 "\\AC03",
@@ -11,6 +11,6 @@
                 "E:\\testdata\\"
             ]
         },
-        "max_watch_files": 1000
+        "max_observed_files": 1000
     }
 }

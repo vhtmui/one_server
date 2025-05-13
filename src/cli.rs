@@ -6,7 +6,7 @@ use std::{
     vec,
 };
 
-use crate::{apps::file_sync_manager::SyncEngine, *};
+use crate::{apps::file_sync_manager::SyncEngine, my_widgets::MyWidgets, *};
 
 // 命令常量定义
 pub const CMD_QUIT: &str = ":q";
@@ -45,6 +45,9 @@ pub fn run_cli_mode() {
             CMD_INTO_FILEMONITOR => {
                 into_filemonitor();
             }
+            CMD_SHOW_LOGS => {
+                println!("日志：");
+            }
             "" => {}
             _ => println!("未知命令，输入 help 查看帮助"),
         }
@@ -54,8 +57,8 @@ pub fn run_cli_mode() {
 
 fn into_filemonitor() {
     // 创建文件监控器
-    let path = load_config().file_monitor.monitor_path;
-    let mut file_monitor = SyncEngine::new("file_monitor".to_string(), path, 50);
+    let path = load_config().file_sync_manager.observed_path;
+    let mut file_sync_manager = SyncEngine::new("file_monitor".to_string(), path, 50);
     loop {
         let cmd = read_trimmed_line("\\filemonitor> ").unwrap_or_else(|| {
             println!("读取输入失败");
@@ -75,15 +78,15 @@ fn into_filemonitor() {
                 ]);
             }
             CMD_SHOW_STATUS => {
-                println!("监控器状态：{:?}", file_monitor.monitor.get_status());
+                println!("监控器状态：{:?}", file_sync_manager.observer.get_status());
                 println!(
                     "扫描器状态：{:?}",
-                    file_monitor.monitor.get_scanner_status()
+                    file_sync_manager.scanner.get_status()
                 );
             }
             CMD_SHOW_LOGS => {
                 println!("日志：");
-                for log in file_monitor.monitor.get_logs() {
+                for log in file_sync_manager.get_logs_str() {
                     println!("{}", log);
                 }
             }
@@ -106,8 +109,8 @@ fn into_filemonitor() {
                         }
                         dir => {
                             if fs::metadata(dir).is_ok() {
-                                file_monitor
-                                    .monitor
+                                file_sync_manager
+                                    .scanner
                                     .start_scanner(PathBuf::from(dir))
                                     .unwrap();
                                 println!("开始扫描目录：{}", dir);
@@ -121,11 +124,11 @@ fn into_filemonitor() {
             }
             CMD_START_MONITOR => {
                 println!(" 开始监控...");
-                file_monitor.monitor.start_monitor().unwrap();
+                file_sync_manager.observer.start_observer().unwrap();
             }
             CMD_STOP_MONITOR => {
                 println!(" 停止监控...");
-                file_monitor.monitor.stop_monitor();
+                file_sync_manager.observer.stop_observer();
             }
             "" => {}
             _ => {}

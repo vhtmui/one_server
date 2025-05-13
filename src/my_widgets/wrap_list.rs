@@ -15,9 +15,9 @@ use crate::{
 
 #[derive(Clone)]
 pub struct WrapList {
-    pub raw_list: VecDeque<OneEvent>,
-    pub list: VecDeque<ListItem<'static>>,
-    pub wrap_len: Option<usize>,
+    raw_list: VecDeque<OneEvent>,
+    list: VecDeque<ListItem<'static>>,
+    wrap_len: Option<usize>,
     dictionary: Standard,
 }
 
@@ -36,21 +36,22 @@ impl WrapList {
     pub fn create_text(e: &OneEvent) -> (&str, String, Color) {
         let (prefix, color) = match &e.kind {
             LogObserverEvent(l) => match l {
-                LOE::Error => ("[ERR]  ", Color::Red),
-                LOE::CreatedFile => ("[CREATE]", Color::Green),
-                LOE::ModifiedFile => ("[MODIFY]", Color::Blue),
-                LOE::DeletedFile => ("[DELETE]", Color::Magenta),
-                LOE::Info => ("[INFO]  ", Color::Magenta),
-                LOE::Start => ("[START]  ", Color::Cyan),
-                LOE::Stop => ("[STOP]  ", Color::Red),
+                LOE::Error => ("[OBSERVER][ERR]  ", Color::Red),
+                LOE::CreatedFile => ("[OBSERVER][CREATE]", Color::Green),
+                LOE::ModifiedFile => ("[OBSERVER][MODIFY]", Color::Blue),
+                LOE::DeletedFile => ("[OBSERVER][DELETE]", Color::Magenta),
+                LOE::Info => ("[OBSERVER][INFO]  ", Color::Magenta),
+                LOE::Start => ("[OBSERVER][START]  ", Color::Cyan),
+                LOE::Stop => ("[OBSERVER][STOP]  ", Color::Red),
             },
 
             DirScannerEvent(d) => match d {
-                DSE::Start => ("[SCAN]  ", Color::Cyan),
-                DSE::Stop => ("[STOP]  ", Color::Yellow),
-                DSE::Complete => ("[COMPLETE]", Color::Green),
-                DSE::Error => ("[ERR]  ", Color::Red),
-                DSE::Info => ("[INFO]  ", Color::Magenta),
+                DSE::Start => ("[SCANNER][SCAN]  ", Color::Cyan),
+                DSE::Stop => ("[SCANNER][STOP]  ", Color::Yellow),
+                DSE::Complete => ("[SCANNER][COMPLETE]", Color::Green),
+                DSE::Error => ("[SCANNER][ERR]  ", Color::Red),
+                DSE::Info => ("[SCANNER][INFO]  ", Color::Magenta),
+                DSE::DBInfo => ("[SCANNER][DBINFO]", Color::Blue),
             },
         };
 
@@ -125,6 +126,20 @@ impl WrapList {
         self.raw_list.push_front(item.clone());
 
         self.add_item(item);
+    }
+
+    pub fn get_raw_list(&self) -> VecDeque<OneEvent> {
+        self.raw_list.clone()
+    }
+
+    pub fn get_raw_list_string(&self) -> Vec<String> {
+        self.raw_list
+            .iter()
+            .map(|e| {
+                let (_, text, _) = Self::create_text(e);
+                format!("{text}")
+            })
+            .collect()
     }
 }
 

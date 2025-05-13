@@ -207,6 +207,13 @@ impl Apps {
             }
         }
     }
+
+    pub fn get_all_logs_str(&self) -> Vec<String> {
+        self.apps
+            .iter()
+            .flat_map(|(_, app)| app.get_logs_str())
+            .collect()
+    }
 }
 
 impl Widget for &mut Apps {

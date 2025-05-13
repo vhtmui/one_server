@@ -37,7 +37,7 @@ async fn main() {
 
     let app = Apps::new();
 
-    let path = load_config().file_monitor.monitor_path;
+    let path = load_config().file_sync_manager.observed_path;
 
     let file_monitor = (
         String::from("file_monitor"),

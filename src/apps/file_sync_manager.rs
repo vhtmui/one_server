@@ -4,6 +4,8 @@ pub mod registry;
 
 pub use dir_scanner::*;
 pub use log_observer::*;
+use ratatui::style::Stylize;
+use ratatui::symbols;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -11,7 +13,7 @@ use std::vec;
 
 use ratatui::layout::Alignment;
 use ratatui::text::{Line, Text};
-use ratatui::widgets::{ListState, Paragraph, StatefulWidget};
+use ratatui::widgets::{ListState, Paragraph, StatefulWidget, Tabs, Widget};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind},
@@ -22,10 +24,7 @@ use ratatui::{
 
 use crate::my_widgets::render_input_popup;
 use crate::{
-    apps::{
-        AppAction::{self, *},
-        file_sync_manager::log_observer::ObserverStatus::*,
-    },
+    apps::AppAction::{self, *},
     my_widgets::{
         MyWidgets, dichotomize_area_with_midlines,
         menu::{MenuItem, MenuState, SerializableMenuItem},
@@ -79,7 +78,6 @@ const MENU_JSON: &str = r#"
 enum CurrentArea {
     LogArea,
     ControlPanelArea,
-    StatusArea,
     InputArea,
 }
 
@@ -101,8 +99,10 @@ pub struct SyncEngine {
     title: String,
     menu_struct: SerializableMenuItem,
     menu_state: RefCell<MenuState>,
-    pub monitor: LogObserver,
+    pub observer: LogObserver,
+    pub scanner: DirScanner,
     log_list_state: RefCell<ListState>,
+    log_tabs: usize,
     input_content: String,
     current_area: CurrentArea,
 }
@@ -114,8 +114,10 @@ impl SyncEngine {
             menu_state: RefCell::new(MenuState::default()),
             title,
             menu_struct,
-            monitor: LogObserver::new(path, log_size),
+            observer: LogObserver::new(path, log_size),
+            scanner: DirScanner::new(log_size),
             log_list_state: RefCell::new(ListState::default()),
+            log_tabs: 0,
             current_area: CurrentArea::ControlPanelArea,
             input_content: String::new(),
         }
@@ -175,27 +177,27 @@ impl SyncEngine {
             .title_style(TITLE_STYLE)
             .title_alignment(Alignment::Center);
 
-        let status = Line::from(format!("Status: {:?}", self.monitor.get_status()));
+        let status = Line::from(format!("Status: {:?}", self.observer.get_status()));
 
-        let lunch_time = Line::from(format!("Lunch time: {}", self.monitor.get_lunch_time()));
+        let lunch_time = Line::from(format!("Lunch time: {}", self.observer.get_lunch_time()));
 
-        let elapsed_time = Line::from(format!("Elapsed time: {}", self.monitor.get_elapsed_time()));
+        let elapsed_time = Line::from(format!(
+            "Elapsed time: {}",
+            self.observer.get_elapsed_time()
+        ));
 
-        let files_got = Line::from(format!("Files got: {}", self.monitor.files_got()));
+        let files_got = Line::from(format!("Files got: {}", self.observer.files_got()));
 
         let file_reading = Line::from(format!(
             "File reading: {}",
-            self.monitor.file_reading().display()
+            self.observer.file_reading().display()
         ));
 
-        let scanner_status = Line::from(format!(
-            "Scanner status: {:?}",
-            self.monitor.get_scanner_status()
-        ));
+        let scanner_status = Line::from(format!("Scanner status: {:?}", self.scanner.get_status()));
 
         let files_recorded = Line::from(format!(
             "Files recorded: {:?}",
-            self.monitor.files_recorded()
+            self.observer.files_recorded()
         ));
 
         let text = Text::from(vec![
@@ -223,9 +225,24 @@ impl SyncEngine {
             .title_alignment(Alignment::Center);
         block.render_ref(area, buf);
 
-        let log_area = Rect {
+        let tabs_area = Rect {
             x: area.x + 1,
-            y: area.y + 1,
+            y: area.y,
+            width: area.width - 2,
+            height: 1,
+        };
+
+        Tabs::new(vec!["observer", "scanner"])
+            .style(Style::default().white())
+            .highlight_style(Style::default().yellow())
+            .select(self.log_tabs)
+            .divider(symbols::DOT)
+            .padding("->", "<-")
+            .render(tabs_area, buf);
+
+        let log_area = Rect {
+            x: area.x + 2,
+            y: area.y + 2,
             width: area.width - 2,
             height: area.height - 2,
         };
@@ -234,9 +251,17 @@ impl SyncEngine {
     }
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
-        let list = &mut self.monitor.get_logs_widget();
+        let list = if self.log_tabs == 0 {
+            &mut self.observer.get_logs_widget()
+        } else {
+            &mut self.scanner.get_logs_widget()
+        };
 
         StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
+    }
+
+    fn toggle_tabs(&mut self) {
+        self.log_tabs = (self.log_tabs + 1) % 2;
     }
 }
 
@@ -285,15 +310,13 @@ impl MyWidgets for SyncEngine {
                     if !self.menu_state.borrow().selected_indices.is_empty() {
                         match self.get_menu_result().as_str() {
                             "monitor-start" => {
-                                self.monitor.start_monitor().unwrap();
+                                self.observer.start_observer().unwrap();
                             }
                             "monitor-stop" => {
-                                self.monitor.stop_monitor();
+                                self.observer.stop_observer();
                             }
                             "scanner-start" => {
-                                if self.monitor.get_scanner_status() != Running {
-                                    self.set_current_area(CurrentArea::InputArea);
-                                }
+                                self.set_current_area(CurrentArea::InputArea);
                             }
                             _ => {}
                         };
@@ -344,6 +367,13 @@ impl MyWidgets for SyncEngine {
                 _ => {}
             },
             CurrentArea::LogArea => match event {
+                Event::Key(KeyEvent {
+                    code: KeyCode::Left | KeyCode::Right,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) => {
+                    self.toggle_tabs();
+                }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     kind: KeyEventKind::Press,
@@ -397,7 +427,7 @@ impl MyWidgets for SyncEngine {
                     kind: KeyEventKind::Press,
                     ..
                 }) => {
-                    self.monitor
+                    self.scanner
                         .start_scanner(PathBuf::from(self.input_content.clone()))?;
                     self.set_current_area(CurrentArea::ControlPanelArea);
                 }
@@ -414,5 +444,14 @@ impl MyWidgets for SyncEngine {
         }
 
         Ok(Default)
+    }
+
+    fn get_logs_str(&self) -> Vec<String> {
+        let observer_logs = self.observer.get_logs_str();
+        let scanner_logs = self.scanner.get_logs_str();
+        let mut logs = Vec::new();
+        logs.extend(observer_logs);
+        logs.extend(scanner_logs);
+        logs
     }
 }

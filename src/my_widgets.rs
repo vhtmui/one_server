@@ -12,6 +12,7 @@ pub mod wrap_list;
 
 pub trait MyWidgets: WidgetRef {
     fn handle_event(&mut self, event: Event) -> Result<AppAction, std::io::Error>;
+    fn get_logs_str(&self) -> Vec<String>;
 }
 
 pub fn get_center_rect(area: Rect, width_percentage: f32, height_percentage: f32) -> Rect {

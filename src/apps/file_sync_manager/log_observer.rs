@@ -20,11 +20,19 @@ use smol::{
 };
 
 use crate::{
-    apps::file_sync_manager::{registry, ObserverStatus::*}, load_config, log, my_widgets::wrap_list::WrapList, OneEvent, EK::*, LOE::*
+    EK::*, LOE::*, OneEvent, ProgressStatus::{self,*}, TIME_ZONE, apps::file_sync_manager::registry,
+    load_config, my_widgets::wrap_list::WrapList,
 };
 
-pub const TIME_ZONE: &FixedOffset = &FixedOffset::east_opt(8 * 3600).unwrap();
-
+macro_rules! log {
+    ($shared_state:expr, $time:expr, $kind:expr, $content:expr $(,)* ) => {
+        $shared_state.lock().unwrap().add_logs(OneEvent {
+            time: Some($time),
+            kind: $kind,
+            content: $content,
+        })
+    };
+}
 pub struct LogObserver {
     pub path: PathBuf,
     shared_state: Arc<Mutex<SharedState>>,
@@ -34,15 +42,9 @@ pub struct LogObserver {
 struct SharedState {
     pub launch_time: DateTime<FixedOffset>,
     pub elapsed_time: TimeDelta,
-    pub status: ObserverStatus,
+    pub status: ProgressStatus,
     pub file_statistic: FileStatistics,
     pub logs: WrapList,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum ObserverStatus {
-    Running,
-    Stopped,
 }
 
 #[derive(Default)]
@@ -78,7 +80,7 @@ impl LogObserver {
         }
     }
 
-    pub fn stop_monitor(&mut self) {
+    pub fn stop_observer(&mut self) {
         if self.shared_state.lock().unwrap().status == Stopped {
             return;
         }
@@ -86,7 +88,7 @@ impl LogObserver {
         self.shared_state
             .lock()
             .unwrap()
-            .set_status(ObserverStatus::Stopped);
+            .set_status(Stopped);
 
         thread::sleep(Duration::from_millis(800));
 
@@ -97,20 +99,20 @@ impl LogObserver {
                     self.shared_state,
                     Utc::now().with_timezone(TIME_ZONE),
                     LogObserverEvent(Stop),
-                    "Monitor is stopping.".to_string()
+                    "Observer is stopping.".to_string()
                 );
             } else {
                 log!(
                     self.shared_state,
                     Utc::now().with_timezone(TIME_ZONE),
                     LogObserverEvent(Error),
-                    "Monitor doesn't stop.".to_string()
+                    "Observer doesn't stop.".to_string()
                 );
             }
         }
     }
 
-    pub fn start_monitor(&mut self) -> Result<()> {
+    pub fn start_observer(&mut self) -> Result<()> {
         if !Path::new(&self.path).exists() {
             let current_path = std::env::current_dir()?;
             log!(
@@ -131,7 +133,7 @@ impl LogObserver {
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
                 LogObserverEvent(Error),
-                "Monitor is already running".to_string()
+                "Observer is already running".to_string()
             );
             return Ok(());
         }
@@ -146,7 +148,7 @@ impl LogObserver {
         let cloned_shared_state = Arc::clone(&self.shared_state);
         let path = self.path.clone();
         let handle =
-            thread::spawn(move || LogObserver::inner_monitor(cloned_shared_state, path, None));
+            thread::spawn(move || LogObserver::inner_observer(cloned_shared_state, path, None));
 
         self.handle = Some(handle);
 
@@ -154,13 +156,13 @@ impl LogObserver {
             self.shared_state,
             Utc::now().with_timezone(TIME_ZONE),
             LogObserverEvent(Start),
-            "Monitor started".to_string()
+            "Observer started".to_string()
         );
         Ok(())
     }
 
     // 线程中运行
-    fn inner_monitor(
+    fn inner_observer(
         shared_state: Arc<Mutex<SharedState>>,
         path: PathBuf,
         poll_duration: Option<Duration>,
@@ -194,7 +196,7 @@ impl LogObserver {
 
             let ss_clone2 = shared_state.clone();
             let iterate_future = async move {
-                let max_files_watched = load_config().file_monitor.max_watch_files;
+                let max_files_watched = load_config().file_sync_manager.max_observed_files;
                 'outer: loop {
                     match rx.recv_timeout(Duration::from_millis(500)) {
                         Ok(Ok(NotifyEvent {
@@ -253,7 +255,7 @@ impl LogObserver {
                                     .unwrap_or((0, 0))
                             };
 
-                            // if the monitor is stopped, break the loop
+                            // if the Observer is stopped, break the loop
                             if ss_clone2.lock().unwrap().status == Stopped {
                                 break 'outer;
                             }
@@ -326,7 +328,7 @@ impl LogObserver {
                 shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
                 LogObserverEvent(Stop),
-                "Monitor stopped".to_string()
+                "Observer stopped".to_string()
             );
 
             drop(watcher);
@@ -377,7 +379,7 @@ impl LogObserver {
         let path = path.replace('/', r#"\"#).replace('+', " ");
 
         // 读取配置
-        let prefix_map = load_config().file_monitor.prefix_map_of_extract_path;
+        let prefix_map = load_config().file_sync_manager.prefix_map_of_extract_path;
 
         // 遍历所有映射，优先非"default"
         for (_key, pair) in prefix_map.iter().filter(|(k, _)| *k != "default") {
@@ -428,11 +430,11 @@ impl LogObserver {
         ss.elapsed_time = TimeDelta::zero();
     }
 
-    pub fn set_status(&self, status: ObserverStatus) {
+    pub fn set_status(&self, status: ProgressStatus) {
         self.shared_state.lock().unwrap().set_status(status);
     }
 
-    pub fn get_status(&self) -> ObserverStatus {
+    pub fn get_status(&self) -> ProgressStatus {
         self.shared_state.lock().unwrap().get_status()
     }
 
@@ -457,15 +459,13 @@ impl LogObserver {
             .files_recorded
     }
 
-    pub fn get_logs(&self) -> Vec<String> {
+    pub fn get_logs_str(&self) -> Vec<String> {
         let logs = &self.shared_state.lock().unwrap().logs;
-        logs.raw_list
-            .iter()
-            .map(|e| {
-                let (_, text, _) = WrapList::create_text(e);
-                format!("{}", text)
-            })
-            .collect()
+        logs.get_raw_list_string()
+    }
+
+    pub fn get_logs_item(&self) -> Vec<OneEvent> {
+        self.shared_state.lock().unwrap().logs.get_raw_list().into()
     }
 
     pub fn get_logs_widget(&self) -> WrapList {
@@ -532,28 +532,17 @@ impl SharedState {
         self.file_statistic.files_got += num;
     }
 
-    fn get_status(&self) -> ObserverStatus {
+    fn get_status(&self) -> ProgressStatus {
         self.status.clone()
     }
 
-    fn set_status(&mut self, status: ObserverStatus) {
+    fn set_status(&mut self, status: ProgressStatus) {
         self.status = status;
     }
 
     fn set_files_reading(&mut self, path: &PathBuf) {
         self.file_statistic.file_reading = path.clone();
     }
-}
-
-#[macro_export]
-macro_rules! log {
-    ($shared_state:expr, $time:expr, $kind:expr, $content:expr $(,)* ) => {
-        $shared_state.lock().unwrap().add_logs(OneEvent {
-            time: Some($time),
-            kind: $kind,
-            content: $content,
-        })
-    };
 }
 
 #[tokio::test]
