@@ -33,6 +33,12 @@ impl WrapList {
         }
     }
 
+    pub fn with_raw_list(mut self, raw_list: VecDeque<OneEvent>) -> Self {
+        self.raw_list = raw_list;
+        self.update_list();
+        self
+    }
+
     pub fn create_text(e: &OneEvent) -> (&str, String, Color) {
         let (prefix, color) = match &e.kind {
             LogObserverEvent(l) => match l {
