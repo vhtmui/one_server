@@ -1,16 +1,21 @@
 pub mod dir_scanner;
 pub mod log_observer;
+pub mod menujson;
 pub mod registry;
 
 pub use dir_scanner::*;
 pub use log_observer::*;
+pub use menujson::MENU_JSON;
+
 use ratatui::style::Stylize;
 use ratatui::symbols;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
+use std::time::Duration;
 use std::vec;
 
+use chrono::Utc;
 use ratatui::layout::Alignment;
 use ratatui::text::{Line, Text};
 use ratatui::widgets::{ListState, Paragraph, StatefulWidget, Tabs, Widget};
@@ -23,7 +28,9 @@ use ratatui::{
 };
 
 use crate::my_widgets::{LogKind, render_input_popup};
+use crate::{DirScannerEventKind, OneEvent};
 use crate::{
+    EventKind, TIME_ZONE,
     apps::AppAction::{self, *},
     my_widgets::{
         MyWidgets, dichotomize_area_with_midlines,
@@ -32,47 +39,6 @@ use crate::{
 };
 
 const TITLE_STYLE: Style = Style::new().fg(Color::Green).add_modifier(Modifier::BOLD);
-const MENU_JSON: &str = r#"
-{
-    "name": "Monitor Menu",
-    "content": "This is a menu of file monitor.",
-    "children": [
-        {
-            "name": "monitor",
-            "content": "This is a description.",
-            "children": [
-                {
-                    "name": "start",
-                    "content": "This is a description of Skyrim.",
-                    "children": []
-                },
-                {
-                    "name": "stop",
-                    "content": "This is a description of Skyrim.",
-                    "children": []
-                }
-            ]
-        },
-        {
-            "name": "scanner",
-            "content": "This is a description of scanner.",
-            "children": [
-                {
-                    "name": "start",
-                    "content": "This is a description of Skyrim.",
-                    "children": []
-                },
-                {
-                    "name": "stop(Developing)",
-                    "content": "This is a description of Skyrim.",
-                    "children": []
-
-                }
-            ]
-        }
-    ]
-}
-"#;
 
 #[derive(Debug, PartialEq, Eq)]
 enum CurrentArea {
@@ -99,11 +65,13 @@ pub struct SyncEngine {
     title: String,
     menu_struct: SerializableMenuItem,
     menu_state: RefCell<MenuState>,
+    menu_selected_string: String,
     pub observer: LogObserver,
     pub scanner: DirScanner,
     log_list_state: RefCell<ListState>,
     log_tabs: usize,
     input_content: String,
+    input_title: String,
     current_area: CurrentArea,
 }
 
@@ -111,15 +79,17 @@ impl SyncEngine {
     pub fn new(title: String, path: PathBuf, log_size: usize) -> Self {
         let menu_struct = serde_json::from_str(MENU_JSON).unwrap();
         SyncEngine {
-            menu_state: RefCell::new(MenuState::default()),
             title,
             menu_struct,
+            menu_state: RefCell::new(MenuState::default()),
+            menu_selected_string: String::new(),
             observer: LogObserver::new(path, log_size),
             scanner: DirScanner::new(log_size),
             log_list_state: RefCell::new(ListState::default()),
             log_tabs: 0,
-            current_area: CurrentArea::ControlPanelArea,
             input_content: String::new(),
+            input_title: String::new(),
+            current_area: CurrentArea::ControlPanelArea,
         }
     }
 
@@ -292,7 +262,7 @@ impl WidgetRef for SyncEngine {
         self.render_log_area(right_area, buf, self.current_area == CurrentArea::LogArea);
 
         if self.current_area == CurrentArea::InputArea {
-            render_input_popup(&self.input_content, area, buf);
+            render_input_popup(&self.input_content, area, buf, &self.input_title);
         }
     }
 }
@@ -316,6 +286,13 @@ impl MyWidgets for SyncEngine {
                                 self.observer.stop_observer();
                             }
                             "scanner-start" => {
+                                self.input_title = "Input path".to_string();
+                                self.menu_selected_string = "scanner-start".to_string();
+                                self.set_current_area(CurrentArea::InputArea);
+                            }
+                            "scanner-start-periodic" => {
+                                self.input_title = "Input path and interval".to_string();
+                                self.menu_selected_string = "scanner-start-periodic".to_string();
                                 self.set_current_area(CurrentArea::InputArea);
                             }
                             _ => {}
@@ -426,11 +403,39 @@ impl MyWidgets for SyncEngine {
                     code: KeyCode::Enter,
                     kind: KeyEventKind::Press,
                     ..
-                }) => {
-                    self.scanner
-                        .start_scanner(PathBuf::from(self.input_content.clone()))?;
-                    self.set_current_area(CurrentArea::ControlPanelArea);
-                }
+                }) => match self.menu_selected_string.as_str() {
+                    "scanner-start" => {
+                        self.scanner
+                            .set_path(PathBuf::from(self.input_content.clone()));
+                        self.scanner.start_scanner()?;
+
+                        self.set_current_area(CurrentArea::ControlPanelArea);
+                    }
+                    "scanner-start_periodic" => {
+                        self.scanner
+                            .set_path(PathBuf::from(self.input_content.clone()));
+
+                        self.input_content.clear();
+                        self.input_title = "Input period (min)".to_string();
+                        self.set_current_area(CurrentArea::InputArea);
+                    }
+                    "scanner-start-periodic-with-delay" => {
+                        let interval = match self.input_content.trim().parse::<u64>() {
+                            Ok(val) => Duration::from_secs(val * 60),
+                            Err(_) => {
+                                self.scanner.add_logs(OneEvent {
+                                    time: Some(Utc::now().with_timezone(TIME_ZONE)),
+                                    kind: EventKind::DirScannerEvent(DirScannerEventKind::Error),
+                                    content: "Failed to parse input content".to_string(),
+                                });
+                                return Ok(Default);
+                            }
+                        };
+
+                        self.scanner.start_periodic_scan(interval);
+                    }
+                    _ => {}
+                },
                 Event::Key(KeyEvent {
                     code: KeyCode::Esc,
                     kind: KeyEventKind::Press,

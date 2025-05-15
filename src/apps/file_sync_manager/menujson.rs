@@ -1,3 +1,4 @@
+pub const MENU_JSON: &str = r#"
 {
     "name": "Monitor Menu",
     "content": "This is a menu of file monitor.",
@@ -42,3 +43,4 @@
         }
     ]
 }
+"#;

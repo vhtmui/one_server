@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::Event,
     layout::{Constraint, Direction, Flex, Layout, Rect},
-    widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
+    widgets::{block::title, Block, Clear, Paragraph, Widget, WidgetRef},
 };
 
 use crate::apps::AppAction;
@@ -68,9 +68,9 @@ pub fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect 
     area
 }
 
-pub fn render_input_popup<'a>(content: &'a str, area: Rect, buf: &mut Buffer) {
+pub fn render_input_popup<'a>(content: &'a str, area: Rect, buf: &mut Buffer, title: &str) {
     let area = center(area, Constraint::Percentage(50), Constraint::Length(3));
-    let popup = Paragraph::new(content).block(Block::bordered().title("Popup"));
+    let popup = Paragraph::new(content).block(Block::bordered().title(title));
     Clear.render(area, buf);
     popup.render(area, buf);
 }

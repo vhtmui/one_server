@@ -30,6 +30,7 @@ macro_rules! log {
 
 pub struct DirScanner {
     shared_state: Arc<Mutex<SharedState>>,
+    path: PathBuf,
 }
 
 struct SharedState {
@@ -46,10 +47,16 @@ impl DirScanner {
                 scanner_status: Stopped,
                 periodic_scan_count: 0,
             })),
+            path: PathBuf::from(""),
         }
     }
 
-    pub fn start_scanner(&mut self, path: PathBuf) -> std::io::Result<()> {
+    pub fn set_path(&mut self, path: PathBuf) {
+        self.path = path;
+    }
+
+    pub fn start_scanner(&mut self) -> std::io::Result<()> {
+        let path = self.path.clone();
         if !path.exists() {
             log!(
                 self.shared_state,
@@ -151,7 +158,8 @@ impl DirScanner {
         Ok(())
     }
 
-    pub fn start_periodic_scan(&self, path: PathBuf, interval: Duration) {
+    pub fn start_periodic_scan(&self, interval: Duration) {
+        let path = self.path.clone();
         if let Running(_) = self.shared_state.lock().unwrap().scanner_status {
             log!(
                 self.shared_state,
@@ -181,7 +189,7 @@ impl DirScanner {
                         format!("Start periodic scan, count {}.", scan_count)
                     );
 
-                    let _ = scanner.start_scanner(path.clone());
+                    let _ = scanner.start_scanner();
                     smol::Timer::after(interval).await;
 
                     log!(
@@ -224,15 +232,15 @@ impl DirScanner {
         let future = async move {
             loop {
                 let status = ss_clone.lock().unwrap().scanner_status.clone();
-               if let Stopped = status {
-                   log!(
-                       ss_clone,
-                       Utc::now().with_timezone(TIME_ZONE),
-                       DirScannerEvent(Stop),
-                       "Scanner stopped".to_string()
-                   );
-                   break;
-               }
+                if let Stopped = status {
+                    log!(
+                        ss_clone,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        DirScannerEvent(Stop),
+                        "Scanner stopped".to_string()
+                    );
+                    break;
+                }
             }
         };
 
@@ -255,6 +263,10 @@ impl DirScanner {
     pub fn get_logs_widget(&self) -> WrapList {
         self.shared_state.lock().unwrap().logs.clone()
     }
+
+    pub fn add_logs(&mut self, event: OneEvent) {
+        self.shared_state.lock().unwrap().add_logs(event);
+    }
 }
 
 impl SharedState {
@@ -271,6 +283,7 @@ impl Clone for DirScanner {
     fn clone(&self) -> Self {
         Self {
             shared_state: self.shared_state.clone(),
+            path: self.path.clone(),
         }
     }
 }

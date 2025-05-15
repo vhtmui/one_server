@@ -145,18 +145,21 @@ impl LogObserver {
         }
 
         let status = self.shared_state.lock().unwrap().status;
-        if status == Running(_) || status == Stopping {
-            log!(
-                self.shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
-                LogObserverEvent(Error),
-                "Observer is running or stopping now".to_string()
-            );
-            return Ok(());
+        match status {
+            Running(_) | Stopping => {
+                log!(
+                    self.shared_state,
+                    Utc::now().with_timezone(TIME_ZONE),
+                    LogObserverEvent(Error),
+                    "Observer is running or stopping.".to_string()
+                );
+                return Ok(());
+            }
+            _ => {}
         }
 
         self.set_launch_time();
-        self.set_status(Running);
+        self.set_status(Running(crate::Running::Periodic));
 
         let time = Utc::now().with_timezone(TIME_ZONE);
         self.shared_state.lock().unwrap().launch_time = time;
