@@ -145,6 +145,17 @@ impl DirScanner {
         Ok(())
     }
 
+    pub fn start_periodic_scan(&self, path: PathBuf, interval: std::time::Duration) {
+        let mut scanner = self.clone();
+        smol::spawn(async move {
+            loop {
+                let _ = scanner.start_scanner(path.clone());
+                smol::Timer::after(interval).await;
+            }
+        })
+        .detach();
+    }
+
     pub fn get_status(&self) -> ProgressStatus {
         self.shared_state.lock().unwrap().scanner_status.clone()
     }
@@ -170,5 +181,13 @@ impl SharedState {
 
     fn set_status(&mut self, status: ProgressStatus) {
         self.scanner_status = status;
+    }
+}
+
+impl Clone for DirScanner {
+    fn clone(&self) -> Self {
+        Self {
+            shared_state: self.shared_state.clone(),
+        }
     }
 }

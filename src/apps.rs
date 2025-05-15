@@ -15,6 +15,7 @@ use ratatui::{
     widgets::{Block, Borders, Widget},
 };
 
+use crate::my_widgets::LogKind;
 use crate::{
     apps::AppAction::*,
     my_widgets::{MyWidgets, get_center_rect},
@@ -211,7 +212,7 @@ impl Apps {
     pub fn get_all_logs_str(&self) -> Vec<String> {
         self.apps
             .iter()
-            .flat_map(|(_, app)| app.get_logs_str())
+            .flat_map(|(_, app)| app.get_logs_str(LogKind::All))
             .collect()
     }
 }

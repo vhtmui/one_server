@@ -6,17 +6,18 @@ use std::{
     vec,
 };
 
-use crate::{apps::file_sync_manager::SyncEngine, my_widgets::MyWidgets, *};
+use crate::{apps::file_sync_manager::SyncEngine, my_widgets::{LogKind, MyWidgets}, *};
 
 // 命令常量定义
 pub const CMD_QUIT: &str = ":q";
 pub const CMD_HELP: &str = "ls";
-pub const CMD_INTO_FILEMONITOR: &str = "cd fm";
-pub const CMD_START_MONITOR: &str = "start mo";
-pub const CMD_STOP_MONITOR: &str = "stop mo";
+pub const CMD_INTO_FILESYNC_MGR: &str = "cd fm";
+pub const CMD_START_OBS: &str = "start obs";
+pub const CMD_STOP_OBS: &str = "stop obs";
 pub const CMD_START_SCAN: &str = "start sc";
 pub const CMD_SHOW_STATUS: &str = "ds status";
-pub const CMD_SHOW_LOGS: &str = "ds log";
+pub const CMD_SHOW_OBS_LOGS: &str = "ds log obs";
+pub const CMD_SHOW_SCAN_LOGS: &str = "ds log sc";
 pub const CMD_INPUT_DIR: &str = "<dir>";
 
 fn read_trimmed_line(prompt: &str) -> Option<String> {
@@ -40,9 +41,9 @@ pub fn run_cli_mode() {
         match cmd.as_str() {
             CMD_QUIT => break,
             CMD_HELP => {
-                help(vec![CMD_INTO_FILEMONITOR]);
+                help(vec![CMD_INTO_FILESYNC_MGR]);
             }
-            CMD_INTO_FILEMONITOR => {
+            CMD_INTO_FILESYNC_MGR => {
                 into_file_sync_mgr();
             }
             "" => {}
@@ -68,10 +69,10 @@ fn into_file_sync_mgr() {
                     CMD_QUIT,
                     CMD_HELP,
                     CMD_SHOW_STATUS,
-                    CMD_SHOW_LOGS,
+                    CMD_SHOW_OBS_LOGS,
                     CMD_START_SCAN,
-                    CMD_START_MONITOR,
-                    CMD_STOP_MONITOR,
+                    CMD_START_OBS,
+                    CMD_STOP_OBS,
                 ]);
             }
             CMD_SHOW_STATUS => {
@@ -81,9 +82,15 @@ fn into_file_sync_mgr() {
                     file_sync_manager.scanner.get_status()
                 );
             }
-            CMD_SHOW_LOGS => {
+            CMD_SHOW_OBS_LOGS => {
                 println!("日志：");
-                for log in file_sync_manager.get_logs_str() {
+                for log in file_sync_manager.get_logs_str(LogKind::Observer) {
+                    println!("{}", log);
+                }
+            }
+            CMD_SHOW_SCAN_LOGS => {
+                println!("扫描日志：");
+                for log in file_sync_manager.get_logs_str(LogKind::Scanner) {
                     println!("{}", log);
                 }
             }
@@ -119,11 +126,11 @@ fn into_file_sync_mgr() {
                     }
                 }
             }
-            CMD_START_MONITOR => {
+            CMD_START_OBS => {
                 println!(" 开始监控...");
                 file_sync_manager.observer.start_observer().unwrap();
             }
-            CMD_STOP_MONITOR => {
+            CMD_STOP_OBS => {
                 println!(" 停止监控...");
                 file_sync_manager.observer.stop_observer();
             }
@@ -138,16 +145,16 @@ fn help(cmds: Vec<&str>) {
     let helps = HashMap::from([
         // MARK: main
         (
-            CMD_INTO_FILEMONITOR,
-            (CMD_INTO_FILEMONITOR, "进入文件监控器"),
+            CMD_INTO_FILESYNC_MGR,
+            (CMD_INTO_FILESYNC_MGR, "进入文件监控器"),
         ),
         (CMD_HELP, (CMD_HELP, "查看帮助")),
         (CMD_QUIT, (CMD_QUIT, "退出")),
         // MARK: filemonitor
         (CMD_SHOW_STATUS, (CMD_SHOW_STATUS, "查看状态")),
-        (CMD_SHOW_LOGS, (CMD_SHOW_LOGS, "查看日志")),
-        (CMD_START_MONITOR, (CMD_START_MONITOR, "开始监控")),
-        (CMD_STOP_MONITOR, (CMD_STOP_MONITOR, "停止监控")),
+        (CMD_SHOW_OBS_LOGS, (CMD_SHOW_OBS_LOGS, "查看日志")),
+        (CMD_START_OBS, (CMD_START_OBS, "开始监控")),
+        (CMD_STOP_OBS, (CMD_STOP_OBS, "停止监控")),
         (CMD_START_SCAN, (CMD_START_SCAN, "开始扫描")),
         (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录")),
     ]);

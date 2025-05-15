@@ -22,7 +22,7 @@ use ratatui::{
     widgets::{Block, Borders, StatefulWidgetRef, WidgetRef},
 };
 
-use crate::my_widgets::render_input_popup;
+use crate::my_widgets::{LogKind, render_input_popup};
 use crate::{
     apps::AppAction::{self, *},
     my_widgets::{
@@ -446,12 +446,15 @@ impl MyWidgets for SyncEngine {
         Ok(Default)
     }
 
-    fn get_logs_str(&self) -> Vec<String> {
-        let observer_logs = self.observer.get_logs_str();
-        let scanner_logs = self.scanner.get_logs_str();
-        let mut logs = Vec::new();
-        logs.extend(observer_logs);
-        logs.extend(scanner_logs);
-        logs
+    fn get_logs_str(&self, kind: LogKind) -> Vec<String> {
+        match kind {
+            LogKind::All => {
+                let mut logs = self.observer.get_logs_str();
+                logs.extend(self.scanner.get_logs_str());
+                logs
+            }
+            LogKind::Observer => self.observer.get_logs_str(),
+            LogKind::Scanner => self.scanner.get_logs_str(),
+        }
     }
 }
