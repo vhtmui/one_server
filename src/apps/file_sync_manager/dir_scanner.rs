@@ -2,9 +2,10 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use walkdir::WalkDir;
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
     EK::*,
     OneEvent,
     ProgressStatus::{self, *},
-    TIME_ZONE,
+    Running, TIME_ZONE,
     apps::file_sync_manager::registry,
     my_widgets::wrap_list::WrapList,
 };
@@ -34,6 +35,7 @@ pub struct DirScanner {
 struct SharedState {
     logs: WrapList,
     pub scanner_status: ProgressStatus,
+    periodic_scan_count: usize,
 }
 
 impl DirScanner {
@@ -42,6 +44,7 @@ impl DirScanner {
             shared_state: Arc::new(Mutex::new(SharedState {
                 logs: WrapList::new(log_size),
                 scanner_status: Stopped,
+                periodic_scan_count: 0,
             })),
         }
     }
@@ -57,7 +60,7 @@ impl DirScanner {
             return Ok(());
         }
 
-        if self.shared_state.lock().unwrap().scanner_status == Running {
+        if let Running(_) = self.shared_state.lock().unwrap().scanner_status {
             log!(
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
@@ -69,7 +72,10 @@ impl DirScanner {
 
         let shared_state = self.shared_state.clone();
 
-        shared_state.lock().unwrap().set_status(Running);
+        shared_state
+            .lock()
+            .unwrap()
+            .set_status(Running(Running::Once));
 
         let ss_clone2 = shared_state.clone();
         let handle = thread::spawn(move || {
@@ -98,7 +104,7 @@ impl DirScanner {
                         shared_state,
                         Utc::now().with_timezone(TIME_ZONE),
                         DirScannerEvent(Complete),
-                        format!("Scanner completed with {:?}", handle_result)
+                        format!("Scanner completed with result {:?}", handle_result)
                     );
                     break;
                 }
@@ -145,15 +151,92 @@ impl DirScanner {
         Ok(())
     }
 
-    pub fn start_periodic_scan(&self, path: PathBuf, interval: std::time::Duration) {
+    pub fn start_periodic_scan(&self, path: PathBuf, interval: Duration) {
+        if let Running(_) = self.shared_state.lock().unwrap().scanner_status {
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                DirScannerEvent(Error),
+                "Scanner already running".to_string()
+            );
+            return;
+        }
+
+        self.shared_state
+            .lock()
+            .unwrap()
+            .set_status(Running(Running::Periodic));
+
         let mut scanner = self.clone();
+        let shared_state = self.shared_state.clone();
         smol::spawn(async move {
             loop {
-                let _ = scanner.start_scanner(path.clone());
-                smol::Timer::after(interval).await;
+                let status = shared_state.lock().unwrap().scanner_status.clone();
+                if let Running(Running::Periodic) = status {
+                    let scan_count = shared_state.lock().unwrap().periodic_scan_count;
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        DirScannerEvent(Start),
+                        format!("Start periodic scan, count {}.", scan_count)
+                    );
+
+                    let _ = scanner.start_scanner(path.clone());
+                    smol::Timer::after(interval).await;
+
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        DirScannerEvent(Complete),
+                        format!("Periodic scan completed, count {}", scan_count)
+                    );
+                } else {
+                    shared_state.lock().unwrap().set_status(Stopped);
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        DirScannerEvent(Stop),
+                        "Periodic scanner stopped manually".to_string()
+                    );
+                    break;
+                }
             }
         })
         .detach();
+    }
+
+    pub fn stop_scanner(&self) {
+        let status = self.shared_state.lock().unwrap().scanner_status.clone();
+
+        if status == Stopped || status == Stopping {
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                DirScannerEvent(Error),
+                "Scanner already stopped or stopping".to_string()
+            );
+            return;
+        }
+
+        self.shared_state.lock().unwrap().set_status(Stopping);
+
+        let ss_clone = self.shared_state.clone();
+        let future = async move {
+            loop {
+                let status = ss_clone.lock().unwrap().scanner_status.clone();
+               if let Stopped = status {
+                   log!(
+                       ss_clone,
+                       Utc::now().with_timezone(TIME_ZONE),
+                       DirScannerEvent(Stop),
+                       "Scanner stopped".to_string()
+                   );
+                   break;
+               }
+            }
+        };
+
+        smol::spawn(future).detach();
     }
 
     pub fn get_status(&self) -> ProgressStatus {

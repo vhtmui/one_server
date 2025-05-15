@@ -3,9 +3,9 @@ pub mod cli;
 pub mod my_widgets;
 pub mod param;
 
-pub use LogObserverEventKind as LOE;
 pub use DirScannerEventKind as DSE;
 pub use EventKind as EK;
+pub use LogObserverEventKind as LOE;
 
 use chrono::{DateTime, FixedOffset};
 use param::default_config_path;
@@ -95,12 +95,19 @@ pub enum DirScannerEventKind {
     DBInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ProgressStatus {
-    Running,
+    Running(Running),
     Stopped,
+    Stopping,
     Finished,
     Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum Running {
+    Periodic,
+    Once,
 }
 
 #[test]

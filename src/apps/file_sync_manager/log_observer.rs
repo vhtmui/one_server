@@ -20,8 +20,14 @@ use smol::{
 };
 
 use crate::{
-    EK::*, LOE::*, OneEvent, ProgressStatus::{self,*}, TIME_ZONE, apps::file_sync_manager::registry,
-    load_config, my_widgets::wrap_list::WrapList,
+    EK::*,
+    LOE::*,
+    OneEvent,
+    ProgressStatus::{self, *},
+    TIME_ZONE,
+    apps::file_sync_manager::registry,
+    load_config,
+    my_widgets::wrap_list::WrapList,
 };
 
 macro_rules! log {
@@ -81,34 +87,45 @@ impl LogObserver {
     }
 
     pub fn stop_observer(&mut self) {
-        if self.shared_state.lock().unwrap().status == Stopped {
+        let status = self.shared_state.lock().unwrap().status;
+        if status == Stopped || status == Stopping {
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                LogObserverEvent(Error),
+                "Observer is already stopped or stopping.".to_string()
+            );
             return;
         }
 
-        self.shared_state
-            .lock()
-            .unwrap()
-            .set_status(Stopped);
+        self.shared_state.lock().unwrap().set_status(Stopped);
 
-        thread::sleep(Duration::from_millis(800));
+        let ss_clone = self.shared_state.clone();
 
         if let Some(handle) = self.handle.take() {
-            if handle.is_finished() {
-                self.reset_time();
-                log!(
-                    self.shared_state,
-                    Utc::now().with_timezone(TIME_ZONE),
-                    LogObserverEvent(Stop),
-                    "Observer is stopping.".to_string()
-                );
-            } else {
-                log!(
-                    self.shared_state,
-                    Utc::now().with_timezone(TIME_ZONE),
-                    LogObserverEvent(Error),
-                    "Observer doesn't stop.".to_string()
-                );
-            }
+            let future = async move {
+                loop {
+                    if handle.is_finished() {
+                        ss_clone.lock().unwrap().reset_time();
+                        log!(
+                            ss_clone,
+                            Utc::now().with_timezone(TIME_ZONE),
+                            LogObserverEvent(Stop),
+                            "Observer is stopping.".to_string()
+                        );
+                    } else {
+                        log!(
+                            ss_clone,
+                            Utc::now().with_timezone(TIME_ZONE),
+                            LogObserverEvent(Error),
+                            "Observer doesn't stop.".to_string()
+                        );
+                    }
+                    future::yield_now().await;
+                }
+            };
+
+            smol::spawn(future).detach();
         }
     }
 
@@ -127,19 +144,18 @@ impl LogObserver {
             return Ok(());
         }
 
-        let ss = self.shared_state.lock().unwrap();
-        if ss.status == Running {
+        let status = self.shared_state.lock().unwrap().status;
+        if status == Running(_) || status == Stopping {
             log!(
                 self.shared_state,
                 Utc::now().with_timezone(TIME_ZONE),
                 LogObserverEvent(Error),
-                "Observer is already running".to_string()
+                "Observer is running or stopping now".to_string()
             );
             return Ok(());
         }
-        drop(ss);
 
-        self.set_lunch_time();
+        self.set_launch_time();
         self.set_status(Running);
 
         let time = Utc::now().with_timezone(TIME_ZONE);
@@ -399,7 +415,7 @@ impl LogObserver {
         PathBuf::from(path)
     }
 
-    pub fn set_lunch_time(&self) {
+    pub fn set_launch_time(&self) {
         self.shared_state.lock().unwrap().launch_time = Utc::now().with_timezone(TIME_ZONE);
     }
 
@@ -424,10 +440,7 @@ impl LogObserver {
 
     pub fn reset_time(&self) {
         let mut ss = self.shared_state.lock().unwrap();
-        ss.launch_time = DateTime::from_timestamp(0, 0)
-            .unwrap()
-            .with_timezone(TIME_ZONE);
-        ss.elapsed_time = TimeDelta::zero();
+        ss.reset_time();
     }
 
     pub fn set_status(&self, status: ProgressStatus) {
@@ -542,6 +555,13 @@ impl SharedState {
 
     fn set_files_reading(&mut self, path: &PathBuf) {
         self.file_statistic.file_reading = path.clone();
+    }
+
+    fn reset_time(&mut self) {
+        self.launch_time = DateTime::from_timestamp(0, 0)
+            .unwrap()
+            .with_timezone(TIME_ZONE);
+        self.elapsed_time = TimeDelta::zero();
     }
 }
 

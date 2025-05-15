@@ -63,7 +63,7 @@ impl WrapList {
 
         let time_str = e
             .time
-            .map(|t| t.format("%H:%M:%S").to_string())
+            .map(|t| t.format("%Y/%m/%d %H:%M:%S").to_string())
             .unwrap_or_else(|| "--:--:--".into());
 
         let text = format!("{prefix} {time_str} {}", e.content);
