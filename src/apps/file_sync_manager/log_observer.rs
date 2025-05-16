@@ -41,11 +41,11 @@ macro_rules! log {
 }
 pub struct LogObserver {
     pub path: PathBuf,
-    shared_state: Arc<Mutex<SharedState>>,
+    pub shared_state: Arc<Mutex<SharedState>>,
     pub handle: Option<thread::JoinHandle<Result<()>>>,
 }
 
-struct SharedState {
+pub struct SharedState {
     pub launch_time: DateTime<FixedOffset>,
     pub elapsed_time: TimeDelta,
     pub status: ProgressStatus,

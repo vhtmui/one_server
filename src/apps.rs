@@ -26,8 +26,7 @@ pub mod file_sync_manager;
 pub const MENU_SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
 pub const MENU_HIGHLIGHT_STYLE: Style = Style::new()
     .bg(SLATE.c800)
-    .fg(ratatui::style::Color::Green)
-    .add_modifier(Modifier::BOLD);
+    .fg(ratatui::style::Color::Green);
 pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
 // const THROTTLE_DURATION: Duration = Duration::from_millis(100);
 
@@ -72,7 +71,7 @@ impl Apps {
                 .draw(|frame| frame.render_widget(&mut *self, frame.area()))
                 .unwrap();
 
-            if poll(Duration::from_millis(0))? {
+            if poll(Duration::ZERO)? {
                 // 渲染计算量过大时限制操作频率。实际应优先优化计算缓存
                 // let mut events = Vec::new();
 

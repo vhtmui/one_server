@@ -214,16 +214,15 @@ impl SyncEngine {
 
         Tabs::new(vec!["observer", "scanner"])
             .style(Style::default().white())
-            .highlight_style(Style::default().yellow())
+            .highlight_style(Style::default().green().bg(Color::Yellow))
             .select(self.log_tabs)
             .divider(symbols::DOT)
-            .padding("->", "<-")
             .render(tabs_area, buf);
 
         let log_area = Rect {
-            x: area.x + 2,
-            y: area.y + 2,
-            width: area.width - 2,
+            x: area.x + 1,
+            y: area.y + 1,
+            width: area.width - 1,
             height: area.height - 2,
         };
 
@@ -231,11 +230,14 @@ impl SyncEngine {
     }
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
-        let list = if self.log_tabs == 0 {
-            &mut self.observer.get_logs_widget()
-        } else {
-            &mut self.scanner.get_logs_widget()
-        };
+        // 不应clone，会导致wrap_len状态无法保存到实例
+        // let list = if self.log_tabs == 0 {
+        //     &mut self.observer.get_logs_widget()
+        // } else {
+        //     &mut self.scanner.get_logs_widget()
+        // };
+
+        let list = &mut self.observer.shared_state.lock().unwrap().logs;
 
         StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
     }
@@ -349,44 +351,33 @@ impl MyWidgets for SyncEngine {
                 }
                 _ => {}
             },
-            CurrentArea::LogArea => match event {
-                Event::Key(KeyEvent {
-                    code: KeyCode::Left | KeyCode::Right,
+            CurrentArea::LogArea => {
+                if let Event::Key(KeyEvent {
+                    code,
                     kind: KeyEventKind::Press,
                     ..
-                }) => {
-                    self.toggle_tabs();
+                }) = event
+                {
+                    match code {
+                        KeyCode::Left | KeyCode::Right => {
+                            self.toggle_tabs();
+                        }
+                        KeyCode::Up => {
+                            self.log_list_state.borrow_mut().scroll_up_by(1);
+                        }
+                        KeyCode::Down => {
+                            self.log_list_state.borrow_mut().scroll_down_by(1);
+                        }
+                        KeyCode::Esc => {
+                            return Ok(ToggleMenu);
+                        }
+                        KeyCode::Tab => {
+                            self.toggle_area();
+                        }
+                        _ => {}
+                    }
                 }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Up,
-                    kind: KeyEventKind::Press,
-                    ..
-                }) => {
-                    self.log_list_state.borrow_mut().scroll_up_by(1);
-                }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Down,
-                    kind: KeyEventKind::Press,
-                    ..
-                }) => {
-                    self.log_list_state.borrow_mut().scroll_down_by(1);
-                }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Esc,
-                    kind: KeyEventKind::Press,
-                    ..
-                }) => {
-                    return Ok(ToggleMenu);
-                }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Tab,
-                    kind: KeyEventKind::Press,
-                    ..
-                }) => {
-                    self.toggle_area();
-                }
-                _ => {}
-            },
+            }
             CurrentArea::InputArea => match event {
                 Event::Paste(s) => {
                     self.input_content.push_str(&s);
