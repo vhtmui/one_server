@@ -159,7 +159,15 @@ impl DirScanner {
     }
 
     pub fn start_periodic_scan(&self, interval: Duration) {
-        let path = self.path.clone();
+        if std::fs::metadata(&self.path).is_err() {
+            log!(
+                self.shared_state,
+                Utc::now().with_timezone(TIME_ZONE),
+                DirScannerEvent(Error),
+                format!("Path does not exist: {}", self.path.display())
+            );
+            return;
+        }
         if let Running(_) = self.shared_state.lock().unwrap().scanner_status {
             log!(
                 self.shared_state,

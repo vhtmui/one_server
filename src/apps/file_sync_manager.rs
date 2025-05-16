@@ -117,6 +117,16 @@ impl SyncEngine {
         self.current_area.toggle();
     }
 
+    fn toggle_tabs(&mut self) {
+        self.log_tabs = (self.log_tabs + 1) % 2;
+    }
+
+    fn clear_input(&mut self) {
+        self.input_content.clear();
+        self.input_title.clear();
+        self.menu_selected_string.clear();
+    }
+
     fn set_current_area(&mut self, area: CurrentArea) {
         self.current_area.set_current_area(area);
     }
@@ -228,10 +238,6 @@ impl SyncEngine {
         };
 
         StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
-    }
-
-    fn toggle_tabs(&mut self) {
-        self.log_tabs = (self.log_tabs + 1) % 2;
     }
 }
 
@@ -409,14 +415,16 @@ impl MyWidgets for SyncEngine {
                             .set_path(PathBuf::from(self.input_content.clone()));
                         self.scanner.start_scanner()?;
 
+                        self.clear_input();
                         self.set_current_area(CurrentArea::ControlPanelArea);
                     }
-                    "scanner-start_periodic" => {
+                    "scanner-start-periodic" => {
                         self.scanner
                             .set_path(PathBuf::from(self.input_content.clone()));
 
-                        self.input_content.clear();
+                        self.clear_input();
                         self.input_title = "Input period (min)".to_string();
+                        self.menu_selected_string = "scanner-start-periodic-with-delay".to_string();
                         self.set_current_area(CurrentArea::InputArea);
                     }
                     "scanner-start-periodic-with-delay" => {
@@ -428,11 +436,17 @@ impl MyWidgets for SyncEngine {
                                     kind: EventKind::DirScannerEvent(DirScannerEventKind::Error),
                                     content: "Failed to parse input content".to_string(),
                                 });
+                                self.clear_input();
                                 return Ok(Default);
                             }
                         };
 
                         self.scanner.start_periodic_scan(interval);
+                        self.set_current_area(CurrentArea::ControlPanelArea);
+                    }
+                    "scanner-stop" => {
+                        self.scanner.stop_scanner();
+                        self.set_current_area(CurrentArea::ControlPanelArea);
                     }
                     _ => {}
                 },

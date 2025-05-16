@@ -29,7 +29,7 @@ pub const MENU_JSON: &str = r#"
                     "children": []
                 },
                 {
-                    "name": "start_periodic",
+                    "name": "start-periodic",
                     "content": "Start periodic scan.",
                     "children": []
                 },

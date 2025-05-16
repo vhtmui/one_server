@@ -6,7 +6,13 @@ use std::{
     vec,
 };
 
-use crate::{apps::file_sync_manager::SyncEngine, my_widgets::{LogKind, MyWidgets}, *};
+use std::time::Duration;
+
+use crate::{
+    apps::file_sync_manager::SyncEngine,
+    my_widgets::{LogKind, MyWidgets},
+    *,
+};
 
 // 命令常量定义
 pub const CMD_QUIT: &str = ":q";
@@ -15,10 +21,12 @@ pub const CMD_INTO_FILESYNC_MGR: &str = "cd fm";
 pub const CMD_START_OBS: &str = "start obs";
 pub const CMD_STOP_OBS: &str = "stop obs";
 pub const CMD_START_SCAN: &str = "start sc";
+pub const CMD_START_PERIODIC_SCAN: &str = "start psc";
 pub const CMD_SHOW_STATUS: &str = "ds status";
 pub const CMD_SHOW_OBS_LOGS: &str = "ds log obs";
 pub const CMD_SHOW_SCAN_LOGS: &str = "ds log sc";
 pub const CMD_INPUT_DIR: &str = "<dir>";
+pub const CMD_INPUT_INTERVAL: &str = "<interval>";
 
 fn read_trimmed_line(prompt: &str) -> Option<String> {
     print!("{}", prompt);
@@ -71,16 +79,14 @@ fn into_file_sync_mgr() {
                     CMD_SHOW_STATUS,
                     CMD_SHOW_OBS_LOGS,
                     CMD_START_SCAN,
+                    CMD_START_PERIODIC_SCAN,
                     CMD_START_OBS,
                     CMD_STOP_OBS,
                 ]);
             }
             CMD_SHOW_STATUS => {
                 println!("监控器状态：{:?}", file_sync_manager.observer.get_status());
-                println!(
-                    "扫描器状态：{:?}",
-                    file_sync_manager.scanner.get_status()
-                );
+                println!("扫描器状态：{:?}", file_sync_manager.scanner.get_status());
             }
             CMD_SHOW_OBS_LOGS => {
                 println!("日志：");
@@ -97,11 +103,11 @@ fn into_file_sync_mgr() {
             CMD_START_SCAN => {
                 println!("  输入扫描路径：");
                 loop {
-                    let dir = read_trimmed_line("").unwrap_or_else(|| {
+                    let path = read_trimmed_line("").unwrap_or_else(|| {
                         println!("读取输入失败");
                         "".to_string()
                     });
-                    match dir.as_str() {
+                    match path.as_str() {
                         "" => {
                             println!("  输入为空，请重新输入");
                             continue;
@@ -111,13 +117,74 @@ fn into_file_sync_mgr() {
                             help(vec![CMD_QUIT, CMD_HELP, CMD_INPUT_DIR]);
                             continue;
                         }
-                        dir => {
-                            if fs::metadata(dir).is_ok() {
+                        path => {
+                            if fs::metadata(path).is_ok() {
+                                file_sync_manager.scanner.set_path(PathBuf::from(path));
+                                file_sync_manager.scanner.start_scanner().unwrap();
+                                println!("开始扫描目录：{}", path);
+                                break;
+                            } else {
+                                print!("目录不存在，请重新输入: ");
+                            }
+                        }
+                    }
+                }
+            }
+            CMD_START_PERIODIC_SCAN => {
+                println!("输入路径");
+                loop {
+                    let path = read_trimmed_line("").unwrap_or_else(|| {
+                        println!("读取输入失败");
+                        "".to_string()
+                    });
+
+                    match path.as_str() {
+                        "" => {
+                            println!("输入为空，请重新输入");
+                            continue;
+                        }
+                        CMD_QUIT => break,
+                        CMD_HELP => {
+                            help(vec![CMD_QUIT, CMD_HELP, CMD_INPUT_DIR]);
+                            continue;
+                        }
+                        path => {
+                            if fs::metadata(&path).is_ok() {
                                 file_sync_manager
                                     .scanner
-                                    .start_scanner(PathBuf::from(dir))
-                                    .unwrap();
-                                println!("开始扫描目录：{}", dir);
+                                    .set_path(PathBuf::from(path));
+                                println!("输入时间间隔（单位：分钟）");
+                                loop {
+                                    let interval = read_trimmed_line("").unwrap_or_else(|| {
+                                        println!("读取输入失败");
+                                        "".to_string()
+                                    });
+                                    match interval.as_str() {
+                                        "" => {
+                                            println!("时间间隔不能为空，请重新输入");
+                                            continue;
+                                        }
+                                        CMD_QUIT => break,
+                                        CMD_HELP => {
+                                            help(vec![CMD_QUIT, CMD_HELP, CMD_INPUT_INTERVAL]);
+                                            continue;
+                                        }
+                                        _ => {}
+                                    }
+                                    if interval.is_empty() {
+                                        println!("时间间隔不能为空，请重新输入");
+                                        continue;
+                                    }
+                                    if let Ok(interval) = interval.parse::<u64>() {
+                                        file_sync_manager.scanner.start_periodic_scan(
+                                            Duration::from_secs(interval * 60),
+                                        );
+                                        println!("开始定时扫描目录：{}", path);
+                                        break;
+                                    } else {
+                                        println!("时间间隔格式错误，请重新输入");
+                                    }
+                                }
                                 break;
                             } else {
                                 print!("目录不存在，请重新输入: ");
@@ -156,7 +223,12 @@ fn help(cmds: Vec<&str>) {
         (CMD_START_OBS, (CMD_START_OBS, "开始监控")),
         (CMD_STOP_OBS, (CMD_STOP_OBS, "停止监控")),
         (CMD_START_SCAN, (CMD_START_SCAN, "开始扫描")),
+        (
+            CMD_START_PERIODIC_SCAN,
+            (CMD_START_PERIODIC_SCAN, "开始定时扫描"),
+        ),
         (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录")),
+        (CMD_INPUT_INTERVAL, (CMD_INPUT_INTERVAL, "输入时间间隔 (单位：分钟)")),
     ]);
     println!("命令列表：");
 
