@@ -203,7 +203,7 @@ impl DirScanner {
             loop {
                 let status = ss_clone.lock().unwrap().scanner_status.clone();
                 if let Running(Running::Periodic) = status {
-                    let scan_count = ss_clone.lock().unwrap().periodic_scan_count;
+                    let scan_count = ss_clone.lock().unwrap().add_scan_count();
                     log!(
                         ss_clone,
                         Utc::now().with_timezone(TIME_ZONE),
@@ -307,5 +307,10 @@ impl SharedState {
 
     fn set_status(&mut self, status: ProgressStatus) {
         self.scanner_status = status;
+    }
+
+    fn add_scan_count(&mut self) -> usize {
+        self.periodic_scan_count += 1;
+        self.periodic_scan_count
     }
 }
