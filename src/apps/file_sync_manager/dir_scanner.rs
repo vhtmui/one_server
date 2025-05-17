@@ -199,7 +199,8 @@ impl DirScanner {
             .set_status(Running(Running::Periodic));
 
         let path = self.path.clone();
-        smol::spawn(async move {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.spawn(async move {
             loop {
                 let status = ss_clone.lock().unwrap().scanner_status.clone();
                 if let Running(Running::Periodic) = status {
@@ -225,7 +226,7 @@ impl DirScanner {
                             }
                     })
                     .await;
-                    smol::Timer::after(interval).await;
+                    tokio::time::sleep(interval).await;
 
                     log!(
                         ss_clone,
@@ -244,8 +245,7 @@ impl DirScanner {
                     break;
                 }
             }
-        })
-        .detach();
+        });
     }
 
     pub fn stop_periodic_scan(&self) {
