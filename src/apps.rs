@@ -1,8 +1,11 @@
 use std::io::Stdout;
-use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
+use ratatui::crossterm::{
+    execute,
+    terminal::{EnterAlternateScreen, enable_raw_mode},
+};
 use ratatui::layout::Rect;
 use ratatui::prelude::CrosstermBackend;
 use ratatui::style::Styled;
@@ -13,20 +16,24 @@ use ratatui::{
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
     style::{Modifier, Style, palette::tailwind::SLATE},
     widgets::{Block, Borders, Widget},
+    restore
 };
+
+use std::io::stdout;
 
 use crate::my_widgets::LogKind;
 use crate::{
     apps::AppAction::*,
+    apps::file_sync_manager::SyncEngine,
     my_widgets::{MyWidgets, get_center_rect},
+    *,
 };
 
 pub mod file_sync_manager;
 
 pub const MENU_SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
-pub const MENU_HIGHLIGHT_STYLE: Style = Style::new()
-    .bg(SLATE.c800)
-    .fg(ratatui::style::Color::Green);
+pub const MENU_HIGHLIGHT_STYLE: Style =
+    Style::new().bg(SLATE.c800).fg(ratatui::style::Color::Green);
 pub const MENU_STYLE: Style = Style::new().bg(SLATE.c600).add_modifier(Modifier::BOLD);
 // const THROTTLE_DURATION: Duration = Duration::from_millis(100);
 
@@ -214,6 +221,36 @@ impl Apps {
             .flat_map(|(_, app)| app.get_logs_str(LogKind::All))
             .collect()
     }
+}
+
+fn set_panic_hook() {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore();
+        hook(info);
+    }));
+}
+
+pub fn run_tui() {
+    set_panic_hook();
+    enable_raw_mode().unwrap();
+    execute!(stdout(), EnterAlternateScreen).unwrap();
+    let backend = CrosstermBackend::new(stdout());
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    let app = Apps::new();
+
+    let path = load_config().file_sync_manager.observed_path;
+
+    let file_monitor = (
+        String::from("file_monitor"),
+        Box::new(SyncEngine::new("file_monitor".to_string(), path, 50)),
+    );
+
+    add_widgets!(app, file_monitor)
+        .set_current_app(0)
+        .run(&mut terminal)
+        .unwrap();
 }
 
 impl Widget for &mut Apps {

@@ -1,17 +1,18 @@
-use crate::{cli, get_param};
+use crate::{apps::run_tui, cli::run_cli_mode, get_param};
 
 pub const PARAM_HELP: &str = "help";
 pub const PARAM_CONFIG_PATH: &str = "cfg=";
 pub const PARAM_CLI: &str = "cli";
-
 
 pub fn handle_params() {
     if let Some(_) = get_param(PARAM_HELP) {
         print_params_help();
     }
     if let Some(_) = get_param(PARAM_CLI) {
-        cli::run_cli_mode();
+        run_cli_mode();
         return;
+    } else {
+        run_tui();
     }
 }
 
