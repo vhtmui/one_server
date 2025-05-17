@@ -231,13 +231,11 @@ impl SyncEngine {
 
     pub fn render_logs(&self, area: Rect, buf: &mut Buffer) {
         // 不应clone，会导致wrap_len状态无法保存到实例
-        // let list = if self.log_tabs == 0 {
-        //     &mut self.observer.get_logs_widget()
-        // } else {
-        //     &mut self.scanner.get_logs_widget()
-        // };
-
-        let list = &mut self.observer.shared_state.lock().unwrap().logs;
+        let list = if self.log_tabs == 0 {
+            &mut self.observer.shared_state.lock().unwrap().logs
+        } else {
+            &mut self.scanner.shared_state.lock().unwrap().logs
+        };
 
         StatefulWidget::render(list, area, buf, &mut *self.log_list_state.borrow_mut());
     }
@@ -419,24 +417,24 @@ impl MyWidgets for SyncEngine {
                         self.set_current_area(CurrentArea::InputArea);
                     }
                     "scanner-start-periodic-with-delay" => {
-                        let interval = match self.input_content.trim().parse::<u64>() {
-                            Ok(val) => Duration::from_secs(val * 60),
+                        match self.input_content.trim().parse::<u64>() {
+                            Ok(val) => {
+                                self.scanner
+                                    .start_periodic_scan(Duration::from_secs(val * 60));
+                            }
                             Err(_) => {
                                 self.scanner.add_logs(OneEvent {
                                     time: Some(Utc::now().with_timezone(TIME_ZONE)),
                                     kind: EventKind::DirScannerEvent(DirScannerEventKind::Error),
                                     content: "Failed to parse input content".to_string(),
                                 });
-                                self.clear_input();
-                                return Ok(Default);
                             }
                         };
-
-                        self.scanner.start_periodic_scan(interval);
+                        self.clear_input();
                         self.set_current_area(CurrentArea::ControlPanelArea);
                     }
                     "scanner-stop" => {
-                        self.scanner.stop_scanner();
+                        self.scanner.stop_periodic_scan();
                         self.set_current_area(CurrentArea::ControlPanelArea);
                     }
                     _ => {}

@@ -31,10 +31,7 @@ impl FileInfo {
             .unwrap_or_else(|_| DateTime::UNIX_EPOCH.into());
         let modified = metadata
             .modified()
-            .map(|t| {
-                let time = DateTime::<Utc>::from(t);
-                time.with_timezone(TIME_ZONE)
-            })
+            .map(|t| DateTime::<Utc>::from(t).with_timezone(TIME_ZONE))
             .unwrap_or_else(|_| DateTime::UNIX_EPOCH.into());
         let size = metadata.len();
         let parent_path = path.parent().map(|p| p.display().to_string());

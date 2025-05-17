@@ -483,23 +483,6 @@ impl LogObserver {
     pub fn get_logs_item(&self) -> Vec<OneEvent> {
         self.shared_state.lock().unwrap().logs.get_raw_list().into()
     }
-
-    pub fn get_logs_widget(&self) -> WrapList {
-        self.shared_state.lock().unwrap().logs.clone()
-    }
-
-    fn set_panic_hook(shared_state: Arc<Mutex<SharedState>>) {
-        panic::set_hook(Box::new(move |panic_info| {
-            log!(
-                shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
-                LogObserverEvent(Error),
-                format!("Thread panicked: {:?}", panic_info)
-            );
-            let mut ss = shared_state.lock().unwrap();
-            ss.status = Stopped;
-        }));
-    }
 }
 
 impl SharedState {

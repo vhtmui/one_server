@@ -22,6 +22,7 @@ pub const CMD_START_OBS: &str = "start obs";
 pub const CMD_STOP_OBS: &str = "stop obs";
 pub const CMD_START_SCAN: &str = "start sc";
 pub const CMD_START_PERIODIC_SCAN: &str = "start psc";
+pub const CMD_STOP_PERIODIC_SCAN: &str = "stop psc";
 pub const CMD_SHOW_STATUS: &str = "ds status";
 pub const CMD_SHOW_OBS_LOGS: &str = "ds log obs";
 pub const CMD_SHOW_SCAN_LOGS: &str = "ds log sc";
@@ -78,8 +79,10 @@ fn into_file_sync_mgr() {
                     CMD_HELP,
                     CMD_SHOW_STATUS,
                     CMD_SHOW_OBS_LOGS,
+                    CMD_SHOW_SCAN_LOGS,
                     CMD_START_SCAN,
                     CMD_START_PERIODIC_SCAN,
+                    CMD_STOP_PERIODIC_SCAN,
                     CMD_START_OBS,
                     CMD_STOP_OBS,
                 ]);
@@ -193,6 +196,10 @@ fn into_file_sync_mgr() {
                     }
                 }
             }
+            CMD_STOP_PERIODIC_SCAN => {
+                println!("停止定时扫描");
+                file_sync_manager.scanner.stop_periodic_scan();
+            }
             CMD_START_OBS => {
                 println!(" 开始监控...");
                 file_sync_manager.observer.start_observer().unwrap();
@@ -220,6 +227,7 @@ fn help(cmds: Vec<&str>) {
         // MARK: filemonitor
         (CMD_SHOW_STATUS, (CMD_SHOW_STATUS, "查看状态")),
         (CMD_SHOW_OBS_LOGS, (CMD_SHOW_OBS_LOGS, "查看日志")),
+        (CMD_SHOW_SCAN_LOGS, (CMD_SHOW_SCAN_LOGS, "查看扫描日志")),
         (CMD_START_OBS, (CMD_START_OBS, "开始监控")),
         (CMD_STOP_OBS, (CMD_STOP_OBS, "停止监控")),
         (CMD_START_SCAN, (CMD_START_SCAN, "开始扫描")),
@@ -227,6 +235,7 @@ fn help(cmds: Vec<&str>) {
             CMD_START_PERIODIC_SCAN,
             (CMD_START_PERIODIC_SCAN, "开始定时扫描"),
         ),
+        (CMD_STOP_PERIODIC_SCAN, (CMD_STOP_PERIODIC_SCAN, "停止定时扫描")),
         (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录")),
         (CMD_INPUT_INTERVAL, (CMD_INPUT_INTERVAL, "输入时间间隔 (单位：分钟)")),
     ]);
