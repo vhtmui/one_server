@@ -109,6 +109,7 @@ pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
         if let Ok(info) = FileInfo::from_path(&path) {
             file_infos.push(info);
         } else {
+            // 忽略找不到的文件，后续添加日志
             continue;
             // return Err(Error::new(
             //     std::io::ErrorKind::Other,

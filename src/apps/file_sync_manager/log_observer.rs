@@ -377,7 +377,7 @@ impl LogObserver {
                             if let Some(words) = line.split_once("STOR 226 ") {
                                 let path_str = words.1.trim_end();
                                 return Some((
-                                    (Self::handle_pathstring(path_str).await, new_offset),
+                                    (Self::handle_pathstring(path_str), new_offset),
                                     (reader, new_offset),
                                 ));
                             }
@@ -393,8 +393,9 @@ impl LogObserver {
         )
     }
 
-    async fn handle_pathstring(path: &str) -> PathBuf {
+    fn handle_pathstring(path: &str) -> PathBuf {
         // 转换为windows风格
+        // 因IIS FTP日志会将文件路径字符串中的空格替换为 +
         let path = path.replace('/', r#"\"#).replace('+', " ");
 
         // 读取配置
@@ -553,14 +554,14 @@ impl SharedState {
 
 #[tokio::test]
 async fn test_path_construction() {
-    let path = LogObserver::handle_pathstring("/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT").await;
+    let path = LogObserver::handle_pathstring("/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT");
 
-    let path_ac03 = LogObserver::handle_pathstring("/AC03/ASDFDSAFDSA.csv").await;
+    let path_ac03 = LogObserver::handle_pathstring("/AC03/ASDFDSAFDSA.csv");
 
-    let path_with_whitespace = LogObserver::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv").await;
+    let path_with_whitespace = LogObserver::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv");
 
     // windows iis ftp日志会将路径中间的空格替换为`+`号，将`+`不做处理
-    let path_with_special_char = LogObserver::handle_pathstring("/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024").await;
+    let path_with_special_char = LogObserver::handle_pathstring("/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024");
 
     assert_eq!(
         PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"),
