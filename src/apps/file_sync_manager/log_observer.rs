@@ -1,5 +1,5 @@
 use std::{
-    panic,
+    io::SeekFrom,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, mpsc},
     thread,
@@ -9,14 +9,11 @@ use std::{
 use indexmap::IndexMap;
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
-use futures;
+use futures::{self, StreamExt, stream};
 use notify::{Event as NotifyEvent, EventKind, RecursiveMode, Result, Watcher};
-use smol::{
+use tokio::{
     fs,
-    future::{self},
-    io::{AsyncBufReadExt, AsyncSeekExt, BufReader, SeekFrom},
-    pin,
-    stream::{self, StreamExt},
+    io::{AsyncBufReadExt, AsyncSeekExt, BufReader},
 };
 
 use crate::{
@@ -41,11 +38,11 @@ macro_rules! log {
 }
 pub struct LogObserver {
     pub path: PathBuf,
-    pub shared_state: Arc<Mutex<SharedState>>,
+    pub shared_state: Arc<Mutex<ObSharedState>>,
     pub handle: Option<thread::JoinHandle<Result<()>>>,
 }
 
-pub struct SharedState {
+pub struct ObSharedState {
     pub launch_time: DateTime<FixedOffset>,
     pub elapsed_time: TimeDelta,
     pub status: ProgressStatus,
@@ -69,7 +66,7 @@ pub struct FileWatchInfo {
 
 impl LogObserver {
     pub fn new(path: PathBuf, log_size: usize) -> Self {
-        let shared_state = Arc::new(Mutex::new(SharedState {
+        let shared_state = Arc::new(Mutex::new(ObSharedState {
             launch_time: DateTime::from_timestamp(0, 0)
                 .unwrap()
                 .with_timezone(TIME_ZONE),
@@ -121,11 +118,11 @@ impl LogObserver {
                             "Observer doesn't stop.".to_string()
                         );
                     }
-                    future::yield_now().await;
+                    tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             };
 
-            smol::spawn(future).detach();
+            tokio::spawn(future);
         }
     }
 
@@ -182,7 +179,7 @@ impl LogObserver {
 
     // 线程中运行
     fn inner_observer(
-        shared_state: Arc<Mutex<SharedState>>,
+        shared_state: Arc<Mutex<ObSharedState>>,
         path: PathBuf,
         poll_duration: Option<Duration>,
     ) -> Result<()> {
@@ -209,7 +206,7 @@ impl LogObserver {
                     if should_stop == Stopped {
                         break;
                     }
-                    future::yield_now().await;
+                    tokio::task::yield_now().await;
                 }
             };
 
@@ -486,7 +483,7 @@ impl LogObserver {
     }
 }
 
-impl SharedState {
+impl ObSharedState {
     fn add_logs(&mut self, event: OneEvent) {
         self.logs.add_raw_item(event);
     }
@@ -554,14 +551,18 @@ impl SharedState {
 
 #[tokio::test]
 async fn test_path_construction() {
-    let path = LogObserver::handle_pathstring("/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT");
+    let path = LogObserver::handle_pathstring(
+        "/CTA8280H/TEST-48/DA35_BP85226D_P01DB_TP16D252_250417237_BP85226_P01DB9X_HDJJ13D._PL_20250507_141512.CAT",
+    );
 
     let path_ac03 = LogObserver::handle_pathstring("/AC03/ASDFDSAFDSA.csv");
 
     let path_with_whitespace = LogObserver::handle_pathstring("/OS2000/AS  DFDSAFDSA.csv");
 
     // windows iis ftp日志会将路径中间的空格替换为`+`号，将`+`不做处理
-    let path_with_special_char = LogObserver::handle_pathstring("/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024");
+    let path_with_special_char = LogObserver::handle_pathstring(
+        "/123/++Starting+Space/Mix!@#$%^&()=+{}[];',~_目录/Sub+Folder+中间+空+格/文件_🌟Unicode_引号_&_Sp++ecial_Chars_最终版_v2.0%20@2024",
+    );
 
     assert_eq!(
         PathBuf::from("E:\\CusData\\AC03\\ASDFDSAFDSA.csv"),
@@ -620,7 +621,7 @@ async fn extract_path(content: &str) -> PathBuf {
     std::fs::write(&file, content).unwrap();
 
     let extracted_paths = LogObserver::extract_path_stream(&file, 0).await;
-    pin!(extracted_paths);
+    futures::pin_mut!(extracted_paths);
 
     let path = extracted_paths.next().await.unwrap();
     std::fs::remove_dir_all(&base).unwrap();

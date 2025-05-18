@@ -1,5 +1,4 @@
 use std::{
-    f32::consts::E,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
@@ -30,11 +29,11 @@ macro_rules! log {
 }
 
 pub struct DirScanner {
-    pub shared_state: Arc<Mutex<SharedState>>,
+    pub shared_state: Arc<Mutex<ScSharedState>>,
     path: PathBuf,
 }
 
-pub struct SharedState {
+pub struct ScSharedState {
     pub logs: WrapList,
     pub scanner_status: ProgressStatus,
     periodic_scan_count: usize,
@@ -43,7 +42,7 @@ pub struct SharedState {
 impl DirScanner {
     pub fn new(log_size: usize) -> Self {
         Self {
-            shared_state: Arc::new(Mutex::new(SharedState {
+            shared_state: Arc::new(Mutex::new(ScSharedState {
                 logs: WrapList::new(log_size),
                 scanner_status: Stopped,
                 periodic_scan_count: 0,
@@ -145,16 +144,16 @@ impl DirScanner {
                     break;
                 }
 
-                smol::Timer::after(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         };
 
-        smol::spawn(future).detach();
+        tokio::spawn(future);
         Ok(())
     }
 
     async fn scan_and_update_dir<F>(
-        shared_state: Arc<Mutex<SharedState>>,
+        shared_state: Arc<Mutex<ScSharedState>>,
         dir: &Path,
         filter: F,
     ) -> std::io::Result<()>
@@ -221,73 +220,83 @@ impl DirScanner {
             .set_status(Running(Running::Periodic));
 
         let path = self.path.clone();
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(async move {
-            'out: loop {
-                let now = Utc::now().with_timezone(TIME_ZONE);
-                let cutoff_time = now - interval;
+        let _ = thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async move {
+                'out: loop {
+                    let now = Utc::now().with_timezone(TIME_ZONE);
+                    let cutoff_time = now - interval;
 
-                let status = ss_clone.lock().unwrap().scanner_status.clone();
-                if let Running(Running::Periodic) = status {
-                    let scan_count = ss_clone.lock().unwrap().add_scan_count();
-                    log!(
-                        ss_clone,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        DirScannerEvent(Start),
-                        format!("Start periodic scan, count {}.", scan_count)
-                    );
+                    let status = ss_clone.lock().unwrap().scanner_status.clone();
+                    if let Running(Running::Periodic) = status {
+                        let scan_count = ss_clone.lock().unwrap().add_scan_count();
+                        log!(
+                            ss_clone,
+                            Utc::now().with_timezone(TIME_ZONE),
+                            DirScannerEvent(Start),
+                            format!("Start periodic scan, count {}.", scan_count)
+                        );
 
-                    let _ = DirScanner::scan_and_update_dir(ss_clone.clone(), &path, |e| {
-                        e.file_type().is_file()
-                            && match e.metadata() {
-                                Ok(meta) => {
-                                    let modified: DateTime<FixedOffset> = meta
-                                        .modified()
-                                        .map(|t| DateTime::<Utc>::from(t).with_timezone(TIME_ZONE))
-                                        .unwrap();
-                                    modified >= cutoff_time
+                        let _ = DirScanner::scan_and_update_dir(ss_clone.clone(), &path, |e| {
+                            e.file_type().is_file()
+                                && match e.metadata() {
+                                    Ok(meta) => {
+                                        let modified: DateTime<FixedOffset> = meta
+                                            .modified()
+                                            .map(|t| DateTime::<Utc>::from(t).with_timezone(TIME_ZONE))
+                                            .unwrap();
+                                        modified >= cutoff_time
+                                    }
+                                    Err(_) => false,
                                 }
-                                Err(_) => false,
-                            }
-                    })
-                    .await;
+                        })
+                        .await;
 
-                    let sleep_step = std::time::Duration::from_secs(1);
-                    let mut slept = std::time::Duration::ZERO;
-                    while slept < interval {
-                        tokio::time::sleep(sleep_step).await;
-                        slept += sleep_step;
-                        let status = ss_clone.lock().unwrap().scanner_status.clone();
-                        if status != Running(Running::Periodic) {
-                            ss_clone.lock().unwrap().set_status(Stopped);
+                        log!(
+                            ss_clone,
+                            Utc::now().with_timezone(TIME_ZONE),
+                            DirScannerEvent(Complete),
+                            format!("Periodic scan completed, count {}", scan_count)
+                        );
+
+                        let sleep_step = std::time::Duration::from_secs(1);
+                        let mut slept = std::time::Duration::ZERO;
+                        while slept < interval {
+                            tokio::time::sleep(sleep_step).await;
+
                             log!(
                                 ss_clone,
                                 Utc::now().with_timezone(TIME_ZONE),
-                                DirScannerEvent(Stop),
-                                "Periodic scanner stopped manually".to_string()
+                                DirScannerEvent(Info),
+                                format!("Sleeping for {} seconds", slept.as_secs())
                             );
 
-                            break 'out;
-                        }
-                    }
+                            slept += sleep_step;
+                            let status = ss_clone.lock().unwrap().scanner_status.clone();
+                            if status != Running(Running::Periodic) {
+                                ss_clone.lock().unwrap().set_status(Stopped);
+                                log!(
+                                    ss_clone,
+                                    Utc::now().with_timezone(TIME_ZONE),
+                                    DirScannerEvent(Stop),
+                                    "Periodic scanner stopped manually".to_string()
+                                );
 
-                    log!(
-                        ss_clone,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        DirScannerEvent(Complete),
-                        format!("Periodic scan completed, count {}", scan_count)
-                    );
-                } else {
-                    ss_clone.lock().unwrap().set_status(Stopped);
-                    log!(
-                        ss_clone,
-                        Utc::now().with_timezone(TIME_ZONE),
-                        DirScannerEvent(Stop),
-                        "Periodic scanner stopped manually".to_string()
-                    );
-                    break;
+                                break 'out;
+                            }
+                        }
+                    } else {
+                        ss_clone.lock().unwrap().set_status(Stopped);
+                        log!(
+                            ss_clone,
+                            Utc::now().with_timezone(TIME_ZONE),
+                            DirScannerEvent(Stop),
+                            "Periodic scanner stopped manually".to_string()
+                        );
+                        break;
+                    }
                 }
-            }
+            });
         });
     }
 
@@ -319,10 +328,11 @@ impl DirScanner {
                     );
                     break;
                 }
+                tokio::task::yield_now().await;
             }
         };
 
-        smol::block_on(future);
+        tokio::spawn(future);
     }
 
     pub fn get_status(&self) -> ProgressStatus {
@@ -343,7 +353,7 @@ impl DirScanner {
     }
 }
 
-impl SharedState {
+impl ScSharedState {
     fn add_logs(&mut self, event: OneEvent) {
         self.logs.add_raw_item(event);
     }

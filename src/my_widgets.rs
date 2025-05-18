@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::Event,
     layout::{Constraint, Direction, Flex, Layout, Rect},
-    widgets::{block::title, Block, Clear, Paragraph, Widget, WidgetRef},
+    widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
 };
 
 use crate::apps::AppAction;
