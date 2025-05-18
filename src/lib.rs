@@ -98,8 +98,8 @@ pub enum DirScannerEventKind {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ProgressStatus {
     Running(Running),
-    Stopped,
     Stopping,
+    Stopped,
     Finished,
     Failed,
 }

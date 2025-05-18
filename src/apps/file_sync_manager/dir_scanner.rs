@@ -71,14 +71,26 @@ impl DirScanner {
 
         let status = ss_clone.lock().unwrap().scanner_status.clone();
 
-        if let Running(_) = status {
-            log!(
-                ss_clone,
-                Utc::now().with_timezone(TIME_ZONE),
-                DirScannerEvent(Error),
-                "Scanner already running".to_string()
-            );
-            return Ok(());
+        match status {
+            Running(_) => {
+                log!(
+                    ss_clone,
+                    Utc::now().with_timezone(TIME_ZONE),
+                    DirScannerEvent(Error),
+                    "Scanner already running".to_string()
+                );
+                return Ok(());
+            }
+            Stopping => {
+                log!(
+                    ss_clone,
+                    Utc::now().with_timezone(TIME_ZONE),
+                    DirScannerEvent(Error),
+                    "Scanner is stopping".to_string()
+                );
+                return Ok(());
+            }
+            _ => {}
         }
 
         let shared_state = self.shared_state.clone();
@@ -107,7 +119,20 @@ impl DirScanner {
 
         let future = async move {
             loop {
+                log!(
+                    shared_state,
+                    Utc::now().with_timezone(TIME_ZONE),
+                    DirScannerEvent(Info),
+                    format!("handle status: {:?}", handle.is_finished())
+                );
                 if handle.is_finished() {
+                    log!(
+                        shared_state,
+                        Utc::now().with_timezone(TIME_ZONE),
+                        DirScannerEvent(Info),
+                        "Handler finished".to_string()
+                    );
+
                     shared_state.lock().unwrap().set_status(Finished);
                     let handle_result = handle.join().unwrap();
 
@@ -120,7 +145,7 @@ impl DirScanner {
                     break;
                 }
 
-                smol::future::yield_now().await;
+                smol::Timer::after(Duration::from_millis(100)).await;
             }
         };
 
@@ -169,9 +194,6 @@ impl DirScanner {
     pub fn start_periodic_scan(&self, interval: Duration) {
         let ss_clone = self.shared_state.clone();
 
-        let now = Utc::now().with_timezone(TIME_ZONE);
-        let cutoff_time = now - interval;
-
         if std::fs::metadata(&self.path).is_err() {
             log!(
                 ss_clone,
@@ -201,7 +223,10 @@ impl DirScanner {
         let path = self.path.clone();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.spawn(async move {
-            loop {
+            'out: loop {
+                let now = Utc::now().with_timezone(TIME_ZONE);
+                let cutoff_time = now - interval;
+
                 let status = ss_clone.lock().unwrap().scanner_status.clone();
                 if let Running(Running::Periodic) = status {
                     let scan_count = ss_clone.lock().unwrap().add_scan_count();
@@ -226,7 +251,25 @@ impl DirScanner {
                             }
                     })
                     .await;
-                    tokio::time::sleep(interval).await;
+
+                    let sleep_step = std::time::Duration::from_secs(1);
+                    let mut slept = std::time::Duration::ZERO;
+                    while slept < interval {
+                        tokio::time::sleep(sleep_step).await;
+                        slept += sleep_step;
+                        let status = ss_clone.lock().unwrap().scanner_status.clone();
+                        if status != Running(Running::Periodic) {
+                            ss_clone.lock().unwrap().set_status(Stopped);
+                            log!(
+                                ss_clone,
+                                Utc::now().with_timezone(TIME_ZONE),
+                                DirScannerEvent(Stop),
+                                "Periodic scanner stopped manually".to_string()
+                            );
+
+                            break 'out;
+                        }
+                    }
 
                     log!(
                         ss_clone,
@@ -279,7 +322,7 @@ impl DirScanner {
             }
         };
 
-        smol::spawn(future).detach();
+        smol::block_on(future);
     }
 
     pub fn get_status(&self) -> ProgressStatus {
