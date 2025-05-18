@@ -243,7 +243,9 @@ impl DirScanner {
                                     Ok(meta) => {
                                         let modified: DateTime<FixedOffset> = meta
                                             .modified()
-                                            .map(|t| DateTime::<Utc>::from(t).with_timezone(TIME_ZONE))
+                                            .map(|t| {
+                                                DateTime::<Utc>::from(t).with_timezone(TIME_ZONE)
+                                            })
                                             .unwrap();
                                         modified >= cutoff_time
                                     }
@@ -263,13 +265,6 @@ impl DirScanner {
                         let mut slept = std::time::Duration::ZERO;
                         while slept < interval {
                             tokio::time::sleep(sleep_step).await;
-
-                            log!(
-                                ss_clone,
-                                Utc::now().with_timezone(TIME_ZONE),
-                                DirScannerEvent(Info),
-                                format!("Sleeping for {} seconds", slept.as_secs())
-                            );
 
                             slept += sleep_step;
                             let status = ss_clone.lock().unwrap().scanner_status.clone();
