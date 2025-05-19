@@ -1,0 +1,1 @@
+2025-05-19 21:38:44: PanicHookInfo { payload: Any { .. }, location: Location { file: "src\\cli.rs", line: 65, col: 17 }, can_unwind: true, force_no_backtrace: false } FmtPayload: "测试 panic" 

@@ -6,6 +6,7 @@ use one_server::*;
 
 #[tokio::main]
 async fn main() {
+    #[cfg(not(debug_assertions))]
     set_panic_hook();
 
     execute!(
@@ -17,6 +18,7 @@ async fn main() {
     param::handle_params();
 }
 
+#[cfg(not(debug_assertions))]
 fn set_panic_hook() {
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -26,7 +28,19 @@ fn set_panic_hook() {
             .open("panic.log")
         {
             let now = chrono::Local::now();
-            let msg = format!("{}: {:?}", now.format("%Y-%m-%d %H:%M:%S"), info);
+            let payload: &str = if let Some(string) = info.payload().downcast_ref::<String>() {
+                string
+            } else if let Some(&string) = info.payload().downcast_ref::<&str>() {
+                string
+            } else {
+                "Unknown"
+            };
+            let msg = format!(
+                "{}: {:?} | FmtPayload: {:?} \n",
+                now.format("%Y-%m-%d %H:%M:%S"),
+                info,
+                payload
+            );
             let _ = file.write_all(msg.as_bytes());
         }
 
