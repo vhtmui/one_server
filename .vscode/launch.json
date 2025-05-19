@@ -27,7 +27,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'one_server'",
+            "name": "Debug cli executable 'one_server'",
             "cargo": {
                 "args": [
                     "build",
