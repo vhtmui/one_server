@@ -16,7 +16,6 @@ use ratatui::{
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, poll, read},
     style::{Modifier, Style, palette::tailwind::SLATE},
     widgets::{Block, Borders, Widget},
-    restore
 };
 
 use std::io::stdout;
@@ -223,16 +222,7 @@ impl Apps {
     }
 }
 
-fn set_panic_hook() {
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        restore();
-        hook(info);
-    }));
-}
-
 pub fn run_tui() {
-    set_panic_hook();
     enable_raw_mode().unwrap();
     execute!(stdout(), EnterAlternateScreen).unwrap();
     let backend = CrosstermBackend::new(stdout());

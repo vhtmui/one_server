@@ -28,6 +28,7 @@ pub const CMD_SHOW_OBS_LOGS: &str = "ds log obs";
 pub const CMD_SHOW_SCAN_LOGS: &str = "ds log sc";
 pub const CMD_INPUT_DIR: &str = "<dir>";
 pub const CMD_INPUT_INTERVAL: &str = "<interval>";
+pub const CMD_TEST_PANIC: &str = "test panic";
 
 fn read_trimmed_line(prompt: &str) -> Option<String> {
     print!("{}", prompt);
@@ -50,11 +51,20 @@ pub fn run_cli_mode() {
         match cmd.as_str() {
             CMD_QUIT => break,
             CMD_HELP => {
-                help(vec![CMD_INTO_FILESYNC_MGR]);
+                help(vec![
+                    CMD_INTO_FILESYNC_MGR,
+                    CMD_HELP,
+                    CMD_QUIT,
+                    CMD_TEST_PANIC,
+                ]);
             }
             CMD_INTO_FILESYNC_MGR => {
                 into_file_sync_mgr();
             }
+            CMD_TEST_PANIC => {
+                panic!("测试 panic");
+            }
+
             "" => {}
             _ => println!("未知命令，输入 help 查看帮助"),
         }
@@ -222,6 +232,7 @@ fn help(cmds: Vec<&str>) {
         ),
         (CMD_HELP, (CMD_HELP, "查看帮助")),
         (CMD_QUIT, (CMD_QUIT, "退出")),
+        (CMD_TEST_PANIC, (CMD_TEST_PANIC, "测试 panic")),
         // MARK: filemonitor
         (CMD_SHOW_STATUS, (CMD_SHOW_STATUS, "查看状态")),
         (CMD_SHOW_OBS_LOGS, (CMD_SHOW_OBS_LOGS, "查看日志")),
