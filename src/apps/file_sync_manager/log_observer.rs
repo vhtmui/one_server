@@ -31,7 +31,7 @@ macro_rules! log {
     ($shared_state:expr, $kind:expr, $content:expr $(,)* ) => {
         $shared_state.lock().unwrap().add_logs(OneEvent {
             time: Some(Utc::now().with_timezone(TIME_ZONE)),
-            kind: $kind,
+            kind: LogObserverEvent($kind),
             content: $content,
         })
     };
@@ -88,7 +88,7 @@ impl LogObserver {
         if status == Stopped || status == Stopping {
             log!(
                 self.shared_state,
-                LogObserverEvent(Error),
+                Error,
                 "Observer is already stopped or stopping.".to_string()
             );
             return;
@@ -103,17 +103,9 @@ impl LogObserver {
                 loop {
                     if handle.is_finished() {
                         ss_clone.lock().unwrap().reset_time();
-                        log!(
-                            ss_clone,
-                            LogObserverEvent(Stop),
-                            "Observer is stopping.".to_string()
-                        );
+                        log!(ss_clone, Stop, "Observer is stopping.".to_string());
                     } else {
-                        log!(
-                            ss_clone,
-                            LogObserverEvent(Error),
-                            "Observer doesn't stop.".to_string()
-                        );
+                        log!(ss_clone, Error, "Observer doesn't stop.".to_string());
                     }
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
@@ -128,7 +120,7 @@ impl LogObserver {
             let current_path = std::env::current_dir()?;
             log!(
                 self.shared_state,
-                LogObserverEvent(Error),
+                Error,
                 format!(
                     "Start failed: path does not exist, current path: {}, please configure the path parameter in cfg.json ",
                     current_path.display()
@@ -142,7 +134,7 @@ impl LogObserver {
             Running(_) | Stopping => {
                 log!(
                     self.shared_state,
-                    LogObserverEvent(Error),
+                    Error,
                     "Observer is running or stopping.".to_string()
                 );
                 return Ok(());
@@ -163,11 +155,7 @@ impl LogObserver {
 
         self.handle = Some(handle);
 
-        log!(
-            self.shared_state,
-            LogObserverEvent(Start),
-            "Observer started".to_string()
-        );
+        log!(self.shared_state, Start, "Observer started".to_string());
         Ok(())
     }
 
@@ -214,15 +202,12 @@ impl LogObserver {
                             paths,
                             ..
                         })) => {
-                            log!(
-                                ss_clone2,
-                                LogObserverEvent(ModifiedFile),
-                                format!(
-                                    "Notify event: {:?}, {:?}",
-                                    EventKind::Modify(ckind),
-                                    paths
-                                )
+                            let msg = format!(
+                                "Notify event: {:?}, {:?}",
+                                EventKind::Modify(ckind),
+                                paths
                             );
+                            log!(ss_clone2, ModifiedFile, msg);
 
                             let path = paths[0].clone();
 
@@ -243,14 +228,11 @@ impl LogObserver {
                                 .unwrap()
                                 .file_size;
 
-                            log!(
-                                ss_clone2,
-                                LogObserverEvent(Info),
-                                format!(
-                                    "File watched updated from {} bytes to {}",
-                                    old_file_size, current_file_size
-                                )
+                            let msg = format!(
+                                "File watched updated from {} bytes to {}",
+                                old_file_size, current_file_size
                             );
+                            log!(ss_clone2, Info, msg);
 
                             // get file's size and last_read_pos
                             let (last_read_pos, file_size) = {
@@ -280,7 +262,7 @@ impl LogObserver {
 
                                 let paths: Vec<PathBuf> =
                                     paths_and_offset.iter().map(|f| f.0.clone()).collect();
-                                registry::process_paths(paths).await.unwrap();
+                                registry::update_file_infos_to_db(paths).await.unwrap();
 
                                 // the offset is the file's size
                                 let offset = file_size;
@@ -302,11 +284,8 @@ impl LogObserver {
 
                                 let bytes_read = offset - last_offset;
 
-                                log!(
-                                    ss_clone2,
-                                    LogObserverEvent(Info),
-                                    format!("Read {} bytes from file {:?}", bytes_read, path)
-                                );
+                                let msg = format!("Read {} bytes from file {:?}", bytes_read, path);
+                                log!(ss_clone2, Info, msg);
 
                                 ss_clone2
                                     .lock()
@@ -317,11 +296,8 @@ impl LogObserver {
                         Ok(_) => {}
                         Err(mpsc::RecvTimeoutError::Timeout) => continue,
                         Err(e) => {
-                            log!(
-                                ss_clone2,
-                                LogObserverEvent(Error),
-                                format!("Error: {:?}", e)
-                            );
+                            let msg = format!("Error: {:?}", e);
+                            log!(ss_clone2, Error, msg);
                             break;
                         }
                     }
@@ -330,11 +306,7 @@ impl LogObserver {
 
             futures::join!(should_stop_future, iterate_future);
 
-            log!(
-                shared_state,
-                LogObserverEvent(Stop),
-                "Observer stopped".to_string()
-            );
+            log!(shared_state, Stop, "Observer stopped".to_string());
 
             drop(watcher);
         });

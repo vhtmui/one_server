@@ -15,13 +15,19 @@ struct FileInfo {
     created_at: DateTime<FixedOffset>,
     modified_at: DateTime<FixedOffset>,
     size: u64,
-    parent_path: Option<String>,
 }
 
 impl FileInfo {
     /// 从PathBuf构造FileInfo
     fn from_path(path: &PathBuf) -> std::io::Result<Self> {
         let metadata = fs::metadata(path)?;
+        // windows长路径带前缀\\?\C:\Users\...\file.txt
+        let full_path = path
+            .canonicalize()
+            .unwrap()
+            .strip_prefix(r"\\?\")
+            .unwrap()
+            .to_path_buf();
         let created = metadata
             .created()
             .map(|t| {
@@ -34,10 +40,9 @@ impl FileInfo {
             .map(|t| DateTime::<Utc>::from(t).with_timezone(TIME_ZONE))
             .unwrap_or_else(|_| DateTime::UNIX_EPOCH.into());
         let size = metadata.len();
-        let parent_path = path.parent().map(|p| p.display().to_string());
 
         Ok(FileInfo {
-            path: path.display().to_string(),
+            path: full_path.display().to_string(),
             filename: path
                 .file_name()
                 .unwrap_or_default()
@@ -46,7 +51,6 @@ impl FileInfo {
             created_at: created,
             modified_at: modified,
             size,
-            parent_path,
         })
     }
 }
@@ -100,7 +104,7 @@ mod db {
 }
 
 // 处理路径，将路径下的文件信息插入数据库
-pub async fn process_paths(paths: Vec<PathBuf>) -> Result<(), Error> {
+pub async fn update_file_infos_to_db(paths: Vec<PathBuf>) -> Result<(), Error> {
     let pool = db::init_pool().await;
     let mut file_infos = Vec::new();
     // let current_path = std::env::current_dir()?;
@@ -167,7 +171,7 @@ fn conn_and_insert() {
             paths.push(file);
         }
 
-        process_paths(paths).await.unwrap();
+        update_file_infos_to_db(paths).await.unwrap();
 
         std::fs::remove_dir_all(&base).unwrap();
     });

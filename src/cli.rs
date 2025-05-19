@@ -153,9 +153,7 @@ fn into_file_sync_mgr() {
                         }
                         path => {
                             if fs::metadata(&path).is_ok() {
-                                file_sync_manager
-                                    .scanner
-                                    .set_path(PathBuf::from(path));
+                                file_sync_manager.scanner.set_path(PathBuf::from(path));
                                 println!("输入时间间隔（单位：分钟）");
                                 loop {
                                     let interval = read_trimmed_line("").unwrap_or_else(|| {
@@ -178,9 +176,9 @@ fn into_file_sync_mgr() {
                                         println!("时间间隔不能为空，请重新输入");
                                         continue;
                                     }
-                                    if let Ok(interval) = interval.parse::<u64>() {
+                                    if let Ok(interval) = interval.parse::<f64>() {
                                         file_sync_manager.scanner.start_periodic_scan(
-                                            Duration::from_secs(interval * 60),
+                                            Duration::from_secs((interval * 60.0) as u64),
                                         );
                                         println!("开始定时扫描目录：{}", path);
                                         break;
@@ -235,9 +233,15 @@ fn help(cmds: Vec<&str>) {
             CMD_START_PERIODIC_SCAN,
             (CMD_START_PERIODIC_SCAN, "开始定时扫描"),
         ),
-        (CMD_STOP_PERIODIC_SCAN, (CMD_STOP_PERIODIC_SCAN, "停止定时扫描")),
+        (
+            CMD_STOP_PERIODIC_SCAN,
+            (CMD_STOP_PERIODIC_SCAN, "停止定时扫描"),
+        ),
         (CMD_INPUT_DIR, (CMD_INPUT_DIR, "输入目录")),
-        (CMD_INPUT_INTERVAL, (CMD_INPUT_INTERVAL, "输入时间间隔 (单位：分钟)")),
+        (
+            CMD_INPUT_INTERVAL,
+            (CMD_INPUT_INTERVAL, "输入时间间隔 (单位：分钟)"),
+        ),
     ]);
     println!("命令列表：");
 

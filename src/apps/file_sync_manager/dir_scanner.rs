@@ -9,7 +9,7 @@ use chrono::{DateTime, FixedOffset, Utc};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    DSE::*,
+    DirScannerEventKind::*,
     EK::*,
     OneEvent,
     ProgressStatus::{self, *},
@@ -22,7 +22,7 @@ macro_rules! log {
     ($shared_state:expr,  $kind:expr, $content:expr $(,)* ) => {
         $shared_state.lock().unwrap().add_logs(OneEvent {
             time: Some(Utc::now().with_timezone(TIME_ZONE)),
-            kind: $kind,
+            kind: DirScannerEvent($kind),
             content: $content,
         })
     };
@@ -56,84 +56,57 @@ impl DirScanner {
     }
 
     pub fn start_scanner(&mut self) -> std::io::Result<()> {
-        let path = self.path.clone();
         let ss_clone = self.shared_state.clone();
+
+        let path = self.path.clone();
         if !path.exists() {
-            log!(
-                ss_clone,
-                DirScannerEvent(Error),
-                format!("Path does not exist: {}", path.display())
-            );
+            let msg = format!("Path does not exist: {}", path.display());
+            log!(ss_clone, Error, msg);
             return Ok(());
         }
 
         let status = ss_clone.lock().unwrap().scanner_status.clone();
-
         match status {
             Running(_) => {
-                log!(
-                    ss_clone,
-                    DirScannerEvent(Error),
-                    "Scanner already running".to_string()
-                );
+                log!(ss_clone, Error, "Scanner already running".to_string());
                 return Ok(());
             }
             Stopping => {
-                log!(
-                    ss_clone,
-                    DirScannerEvent(Error),
-                    "Scanner is stopping".to_string()
-                );
+                log!(ss_clone, Error, "Scanner is stopping".to_string());
                 return Ok(());
             }
-            _ => {}
+            _ => {
+                ss_clone.lock().unwrap().set_status(Running(Running::Once));
+            }
         }
 
-        let shared_state = self.shared_state.clone();
-
-        shared_state
-            .lock()
-            .unwrap()
-            .set_status(Running(Running::Once));
-
-        let ss_clone2 = shared_state.clone();
+        let ss_clone2 = ss_clone.clone();
         let handle = thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                Self::scan_and_update_dir(ss_clone2, &path, |e| e.file_type().is_file()).await?;
+                Self::collect_and_update_fileinfo(ss_clone2, &path, |e| e.file_type().is_file())
+                    .await?;
                 Ok::<(), std::io::Error>(())
             })?;
             Ok::<(), std::io::Error>(())
         });
 
-        log!(
-            shared_state,
-            DirScannerEvent(Start),
-            "Scanner started".to_string()
-        );
+        log!(ss_clone, Start, "Scanner started".to_string());
 
         let future = async move {
             loop {
-                log!(
-                    shared_state,
-                    DirScannerEvent(Info),
-                    format!("handle status: {:?}", handle.is_finished())
-                );
-                if handle.is_finished() {
-                    log!(
-                        shared_state,
-                        DirScannerEvent(Info),
-                        "Handler finished".to_string()
-                    );
+                let msg = format!("handle status: {:?}", handle.is_finished());
+                log!(ss_clone, Info, msg);
 
-                    shared_state.lock().unwrap().set_status(Finished);
+                if handle.is_finished() {
+                    log!(ss_clone, Info, "Handler finished".to_string());
+
+                    ss_clone.lock().unwrap().set_status(Finished);
                     let handle_result = handle.join().unwrap();
 
-                    log!(
-                        shared_state,
-                        DirScannerEvent(Complete),
-                        format!("Scanner completed with result {:?}", handle_result)
-                    );
+                    let msg = format!("Scanner completed with result {:?}", handle_result);
+                    log!(ss_clone, Complete, msg);
+
                     break;
                 }
 
@@ -145,61 +118,18 @@ impl DirScanner {
         Ok(())
     }
 
-    async fn scan_and_update_dir<F>(
-        shared_state: Arc<Mutex<ScSharedState>>,
-        dir: &Path,
-        filter: F,
-    ) -> std::io::Result<()>
-    where
-        F: Fn(&DirEntry) -> bool,
-    {
-        // 递归收集所有文件路径
-        let files: Vec<PathBuf> = WalkDir::new(dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| filter(e))
-            .map(|e| e.path().to_path_buf())
-            .collect();
-
-        log!(
-            shared_state,
-            DirScannerEvent(Info),
-            format!(
-                "Found {} files in the directory. Executing insert...",
-                files.len()
-            )
-        );
-
-        // 调用数据库更新
-        registry::process_paths(files).await?;
-
-        log!(
-            shared_state,
-            DirScannerEvent(DBInfo),
-            "DB update finished.".to_string()
-        );
-        Ok(())
-    }
-
     pub fn start_periodic_scan(&self, interval: Duration) {
         let ss_clone = self.shared_state.clone();
 
         if std::fs::metadata(&self.path).is_err() {
-            log!(
-                ss_clone,
-                DirScannerEvent(Error),
-                format!("Path does not exist: {}", self.path.display())
-            );
+            let msg = format!("Path does not exist: {}", self.path.display());
+            log!(ss_clone, Error, msg);
             return;
         }
 
         let status = ss_clone.lock().unwrap().scanner_status.clone();
         if let Running(_) = status {
-            log!(
-                ss_clone,
-                DirScannerEvent(Error),
-                "Scanner already running".to_string()
-            );
+            log!(ss_clone, Error, "Scanner already running".to_string());
             return;
         }
 
@@ -219,34 +149,30 @@ impl DirScanner {
                     let status = ss_clone.lock().unwrap().scanner_status.clone();
                     if let Running(Running::Periodic) = status {
                         let scan_count = ss_clone.lock().unwrap().add_scan_count();
-                        log!(
-                            ss_clone,
-                            DirScannerEvent(Start),
-                            format!("Start periodic scan, count {}.", scan_count)
-                        );
+                        let msg = format!("Start periodic scan, count {}.", scan_count);
+                        log!(ss_clone, Start, msg);
 
-                        let _ = DirScanner::scan_and_update_dir(ss_clone.clone(), &path, |e| {
-                            e.file_type().is_file()
-                                && match e.metadata() {
-                                    Ok(meta) => {
-                                        let modified: DateTime<FixedOffset> = meta
-                                            .modified()
-                                            .map(|t| {
-                                                DateTime::<Utc>::from(t).with_timezone(TIME_ZONE)
-                                            })
-                                            .unwrap();
-                                        modified >= cutoff_time
+                        let _ =
+                            DirScanner::collect_and_update_fileinfo(ss_clone.clone(), &path, |e| {
+                                e.file_type().is_file()
+                                    && match e.metadata() {
+                                        Ok(meta) => {
+                                            let modified: DateTime<FixedOffset> = meta
+                                                .modified()
+                                                .map(|t| {
+                                                    DateTime::<Utc>::from(t)
+                                                        .with_timezone(TIME_ZONE)
+                                                })
+                                                .unwrap();
+                                            modified >= cutoff_time
+                                        }
+                                        Err(_) => false,
                                     }
-                                    Err(_) => false,
-                                }
-                        })
-                        .await;
+                            })
+                            .await;
 
-                        log!(
-                            ss_clone,
-                            DirScannerEvent(Complete),
-                            format!("Periodic scan completed, count {}", scan_count)
-                        );
+                        let msg = format!("Periodic scan completed, count {}", scan_count);
+                        log!(ss_clone, Complete, msg);
 
                         let sleep_step = std::time::Duration::from_secs(1);
                         let mut slept = std::time::Duration::ZERO;
@@ -259,7 +185,7 @@ impl DirScanner {
                                 ss_clone.lock().unwrap().set_status(Stopped);
                                 log!(
                                     ss_clone,
-                                    DirScannerEvent(Stop),
+                                    Stop,
                                     "Periodic scanner stopped manually".to_string()
                                 );
 
@@ -270,7 +196,7 @@ impl DirScanner {
                         ss_clone.lock().unwrap().set_status(Stopped);
                         log!(
                             ss_clone,
-                            DirScannerEvent(Stop),
+                            Stop,
                             "Periodic scanner stopped manually".to_string()
                         );
                         break;
@@ -286,7 +212,7 @@ impl DirScanner {
         if status == Stopped || status == Stopping {
             log!(
                 self.shared_state,
-                DirScannerEvent(Error),
+                Error,
                 "Scanner already stopped or stopping".to_string()
             );
             return;
@@ -299,11 +225,7 @@ impl DirScanner {
             loop {
                 let status = ss_clone.lock().unwrap().scanner_status.clone();
                 if let Stopped = status {
-                    log!(
-                        ss_clone,
-                        DirScannerEvent(Stop),
-                        "Scanner stopped".to_string()
-                    );
+                    log!(ss_clone, Stop, "Scanner stopped".to_string());
                     break;
                 }
                 tokio::task::yield_now().await;
@@ -311,6 +233,36 @@ impl DirScanner {
         };
 
         tokio::spawn(future);
+    }
+
+    async fn collect_and_update_fileinfo<F>(
+        shared_state: Arc<Mutex<ScSharedState>>,
+        dir: &Path,
+        filter: F,
+    ) -> std::io::Result<()>
+    where
+        F: Fn(&DirEntry) -> bool,
+    {
+        // 递归收集所有文件路径
+        let files: Vec<PathBuf> = WalkDir::new(dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| filter(e))
+            .map(|e| e.path().to_path_buf())
+            .collect();
+
+        let msg = format!(
+            "Found {} files in the directory: {}",
+            files.len(),
+            dir.display()
+        );
+        log!(shared_state, Info, msg);
+
+        // 调用数据库更新
+        registry::update_file_infos_to_db(files).await?;
+
+        log!(shared_state, DBInfo, "DB update finished.".to_string());
+        Ok(())
     }
 
     pub fn get_status(&self) -> ProgressStatus {
