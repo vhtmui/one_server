@@ -19,9 +19,9 @@ use crate::{
 };
 
 macro_rules! log {
-    ($shared_state:expr, $time:expr, $kind:expr, $content:expr $(,)* ) => {
+    ($shared_state:expr,  $kind:expr, $content:expr $(,)* ) => {
         $shared_state.lock().unwrap().add_logs(OneEvent {
-            time: Some($time),
+            time: Some(Utc::now().with_timezone(TIME_ZONE)),
             kind: $kind,
             content: $content,
         })
@@ -61,7 +61,6 @@ impl DirScanner {
         if !path.exists() {
             log!(
                 ss_clone,
-                Utc::now().with_timezone(TIME_ZONE),
                 DirScannerEvent(Error),
                 format!("Path does not exist: {}", path.display())
             );
@@ -74,7 +73,6 @@ impl DirScanner {
             Running(_) => {
                 log!(
                     ss_clone,
-                    Utc::now().with_timezone(TIME_ZONE),
                     DirScannerEvent(Error),
                     "Scanner already running".to_string()
                 );
@@ -83,7 +81,6 @@ impl DirScanner {
             Stopping => {
                 log!(
                     ss_clone,
-                    Utc::now().with_timezone(TIME_ZONE),
                     DirScannerEvent(Error),
                     "Scanner is stopping".to_string()
                 );
@@ -111,7 +108,6 @@ impl DirScanner {
 
         log!(
             shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
             DirScannerEvent(Start),
             "Scanner started".to_string()
         );
@@ -120,14 +116,12 @@ impl DirScanner {
             loop {
                 log!(
                     shared_state,
-                    Utc::now().with_timezone(TIME_ZONE),
                     DirScannerEvent(Info),
                     format!("handle status: {:?}", handle.is_finished())
                 );
                 if handle.is_finished() {
                     log!(
                         shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
                         DirScannerEvent(Info),
                         "Handler finished".to_string()
                     );
@@ -137,7 +131,6 @@ impl DirScanner {
 
                     log!(
                         shared_state,
-                        Utc::now().with_timezone(TIME_ZONE),
                         DirScannerEvent(Complete),
                         format!("Scanner completed with result {:?}", handle_result)
                     );
@@ -170,7 +163,6 @@ impl DirScanner {
 
         log!(
             shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
             DirScannerEvent(Info),
             format!(
                 "Found {} files in the directory. Executing insert...",
@@ -183,7 +175,6 @@ impl DirScanner {
 
         log!(
             shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
             DirScannerEvent(DBInfo),
             "DB update finished.".to_string()
         );
@@ -196,7 +187,6 @@ impl DirScanner {
         if std::fs::metadata(&self.path).is_err() {
             log!(
                 ss_clone,
-                Utc::now().with_timezone(TIME_ZONE),
                 DirScannerEvent(Error),
                 format!("Path does not exist: {}", self.path.display())
             );
@@ -207,7 +197,6 @@ impl DirScanner {
         if let Running(_) = status {
             log!(
                 ss_clone,
-                Utc::now().with_timezone(TIME_ZONE),
                 DirScannerEvent(Error),
                 "Scanner already running".to_string()
             );
@@ -232,7 +221,6 @@ impl DirScanner {
                         let scan_count = ss_clone.lock().unwrap().add_scan_count();
                         log!(
                             ss_clone,
-                            Utc::now().with_timezone(TIME_ZONE),
                             DirScannerEvent(Start),
                             format!("Start periodic scan, count {}.", scan_count)
                         );
@@ -256,7 +244,6 @@ impl DirScanner {
 
                         log!(
                             ss_clone,
-                            Utc::now().with_timezone(TIME_ZONE),
                             DirScannerEvent(Complete),
                             format!("Periodic scan completed, count {}", scan_count)
                         );
@@ -272,7 +259,6 @@ impl DirScanner {
                                 ss_clone.lock().unwrap().set_status(Stopped);
                                 log!(
                                     ss_clone,
-                                    Utc::now().with_timezone(TIME_ZONE),
                                     DirScannerEvent(Stop),
                                     "Periodic scanner stopped manually".to_string()
                                 );
@@ -284,7 +270,6 @@ impl DirScanner {
                         ss_clone.lock().unwrap().set_status(Stopped);
                         log!(
                             ss_clone,
-                            Utc::now().with_timezone(TIME_ZONE),
                             DirScannerEvent(Stop),
                             "Periodic scanner stopped manually".to_string()
                         );
@@ -301,7 +286,6 @@ impl DirScanner {
         if status == Stopped || status == Stopping {
             log!(
                 self.shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
                 DirScannerEvent(Error),
                 "Scanner already stopped or stopping".to_string()
             );
@@ -317,7 +301,6 @@ impl DirScanner {
                 if let Stopped = status {
                     log!(
                         ss_clone,
-                        Utc::now().with_timezone(TIME_ZONE),
                         DirScannerEvent(Stop),
                         "Scanner stopped".to_string()
                     );

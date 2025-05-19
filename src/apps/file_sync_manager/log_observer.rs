@@ -28,9 +28,9 @@ use crate::{
 };
 
 macro_rules! log {
-    ($shared_state:expr, $time:expr, $kind:expr, $content:expr $(,)* ) => {
+    ($shared_state:expr, $kind:expr, $content:expr $(,)* ) => {
         $shared_state.lock().unwrap().add_logs(OneEvent {
-            time: Some($time),
+            time: Some(Utc::now().with_timezone(TIME_ZONE)),
             kind: $kind,
             content: $content,
         })
@@ -88,7 +88,6 @@ impl LogObserver {
         if status == Stopped || status == Stopping {
             log!(
                 self.shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
                 LogObserverEvent(Error),
                 "Observer is already stopped or stopping.".to_string()
             );
@@ -106,14 +105,12 @@ impl LogObserver {
                         ss_clone.lock().unwrap().reset_time();
                         log!(
                             ss_clone,
-                            Utc::now().with_timezone(TIME_ZONE),
                             LogObserverEvent(Stop),
                             "Observer is stopping.".to_string()
                         );
                     } else {
                         log!(
                             ss_clone,
-                            Utc::now().with_timezone(TIME_ZONE),
                             LogObserverEvent(Error),
                             "Observer doesn't stop.".to_string()
                         );
@@ -131,7 +128,6 @@ impl LogObserver {
             let current_path = std::env::current_dir()?;
             log!(
                 self.shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
                 LogObserverEvent(Error),
                 format!(
                     "Start failed: path does not exist, current path: {}, please configure the path parameter in cfg.json ",
@@ -146,7 +142,6 @@ impl LogObserver {
             Running(_) | Stopping => {
                 log!(
                     self.shared_state,
-                    Utc::now().with_timezone(TIME_ZONE),
                     LogObserverEvent(Error),
                     "Observer is running or stopping.".to_string()
                 );
@@ -170,7 +165,6 @@ impl LogObserver {
 
         log!(
             self.shared_state,
-            Utc::now().with_timezone(TIME_ZONE),
             LogObserverEvent(Start),
             "Observer started".to_string()
         );
@@ -222,7 +216,6 @@ impl LogObserver {
                         })) => {
                             log!(
                                 ss_clone2,
-                                Utc::now().with_timezone(TIME_ZONE),
                                 LogObserverEvent(ModifiedFile),
                                 format!(
                                     "Notify event: {:?}, {:?}",
@@ -252,7 +245,6 @@ impl LogObserver {
 
                             log!(
                                 ss_clone2,
-                                Utc::now().with_timezone(TIME_ZONE),
                                 LogObserverEvent(Info),
                                 format!(
                                     "File watched updated from {} bytes to {}",
@@ -312,7 +304,6 @@ impl LogObserver {
 
                                 log!(
                                     ss_clone2,
-                                    Utc::now().with_timezone(TIME_ZONE),
                                     LogObserverEvent(Info),
                                     format!("Read {} bytes from file {:?}", bytes_read, path)
                                 );
@@ -328,7 +319,6 @@ impl LogObserver {
                         Err(e) => {
                             log!(
                                 ss_clone2,
-                                Utc::now().with_timezone(TIME_ZONE),
                                 LogObserverEvent(Error),
                                 format!("Error: {:?}", e)
                             );
@@ -342,7 +332,6 @@ impl LogObserver {
 
             log!(
                 shared_state,
-                Utc::now().with_timezone(TIME_ZONE),
                 LogObserverEvent(Stop),
                 "Observer stopped".to_string()
             );
@@ -549,6 +538,7 @@ impl ObSharedState {
     }
 }
 
+// MARK: test
 #[tokio::test]
 async fn test_path_construction() {
     let path = LogObserver::handle_pathstring(
