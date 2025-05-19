@@ -103,13 +103,13 @@ fn into_file_sync_mgr() {
             }
             CMD_SHOW_OBS_LOGS => {
                 println!("日志：");
-                for log in file_sync_manager.get_logs_str(LogKind::Observer) {
+                for log in file_sync_manager.get_logs_str(LogKind::Observer).iter().rev() {
                     println!("{}", log);
                 }
             }
             CMD_SHOW_SCAN_LOGS => {
                 println!("扫描日志：");
-                for log in file_sync_manager.get_logs_str(LogKind::Scanner) {
+                for log in file_sync_manager.get_logs_str(LogKind::Scanner).iter().rev() {
                     println!("{}", log);
                 }
             }
